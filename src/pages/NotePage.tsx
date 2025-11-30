@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FileText, Download, Copy, RefreshCw, Edit2, Save } from 'lucide-react';
+import { FileText, Download, Copy, RefreshCw, Edit2, Save, Trash2 } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -14,14 +14,16 @@ interface NotePageProps {
   note: Note;
   onNavigate: (page: Page) => void;
   onLogout: () => void;
+  onNoteDeleted?: () => void;
 }
 
-export default function NotePage({ user, note, onNavigate, onLogout }: NotePageProps) {
+export default function NotePage({ user, note, onNavigate, onLogout, onNoteDeleted }: NotePageProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedNote, setEditedNote] = useState(note.content);
   const [isSaving, setIsSaving] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
-  const { editNote, saveNote, isLoading } = useDatabase();
+  const [isDeleting, setIsDeleting] = useState(false);
+  const { editNote, saveNote, isLoading, removeNote } = useDatabase();
   const { generateStructuredNoteContent, isGenerating } = useAI();
 
   const handleSave = async () => {
@@ -148,6 +150,40 @@ export default function NotePage({ user, note, onNavigate, onLogout }: NotePageP
     }
   };
 
+  const handleDelete = async () => {
+    if (!confirm(`Are you sure you want to delete this note for ${note.patientName}? This action cannot be undone.`)) {
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      console.log('Starting note deletion for note ID:', note.id);
+      const success = await removeNote(note.id);
+      console.log('Delete operation completed. Success:', success);
+      
+      if (success) {
+        console.log('Delete successful, showing success toast');
+        toast.success('Note deleted successfully');
+        
+        console.log('Calling onNoteDeleted callback');
+        onNoteDeleted?.();
+        
+        console.log('Navigating to dashboard');
+        // Add a small delay to ensure deletion is processed
+        await new Promise(resolve => setTimeout(resolve, 500));
+        onNavigate('dashboard');
+      } else {
+        console.warn('Delete operation returned false');
+        toast.error('Failed to delete note');
+      }
+    } catch (err) {
+      console.error('Exception during note deletion:', err);
+      toast.error('Failed to delete note');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   return (
     <DashboardLayout user={user} currentPage="note" onNavigate={onNavigate} onLogout={onLogout}>
       <div className="max-w-5xl mx-auto space-y-6 animate-fade-in">
@@ -175,10 +211,20 @@ export default function NotePage({ user, note, onNavigate, onLogout }: NotePageP
                 {isSaving || isLoading ? 'Saving...' : 'Save Changes'}
               </Button>
             ) : (
-              <Button variant="outline" onClick={() => setIsEditing(true)}>
-                <Edit2 className="w-4 h-4 mr-2" />
-                Edit
-              </Button>
+              <>
+                <Button variant="outline" onClick={() => setIsEditing(true)}>
+                  <Edit2 className="w-4 h-4 mr-2" />
+                  Edit
+                </Button>
+                <Button 
+                  variant="destructive" 
+                  onClick={handleDelete} 
+                  disabled={isDeleting || isEditing}
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  {isDeleting ? 'Deleting...' : 'Delete'}
+                </Button>
+              </>
             )}
           </div>
         </div>

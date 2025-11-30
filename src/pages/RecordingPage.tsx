@@ -34,6 +34,7 @@ export default function RecordingPage({ user, onNavigate, onLogout, onNoteCreate
   const timerRef = useRef<NodeJS.Timeout>();
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const recordingDurationRef = useRef<number>(0);
   
   const { 
     transcribeClinicalRecording, 
@@ -55,6 +56,8 @@ export default function RecordingPage({ user, onNavigate, onLogout, onNoteCreate
   const startRecording = async () => {
     try {
       chunksRef.current = [];
+      recordingDurationRef.current = 0; // Reset duration
+      
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
           echoCancellation: true,
@@ -75,8 +78,8 @@ export default function RecordingPage({ user, onNavigate, onLogout, onNoteCreate
       mediaRecorder.onstop = () => {
         const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
         setAudioBlob(blob);
-        // Process immediately with the blob
-        processRecording(blob);
+        // Process immediately with the blob and captured duration
+        processRecording(blob, recordingDurationRef.current);
       };
 
       mediaRecorder.start();
@@ -84,7 +87,11 @@ export default function RecordingPage({ user, onNavigate, onLogout, onNoteCreate
       setRecordingTime(0);
       
       timerRef.current = setInterval(() => {
-        setRecordingTime(prev => prev + 1);
+        setRecordingTime(prev => {
+          const newTime = prev + 1;
+          recordingDurationRef.current = newTime; // Update the ref with current time
+          return newTime;
+        });
       }, 1000);
 
       toast.success('Recording started');
@@ -104,12 +111,14 @@ export default function RecordingPage({ user, onNavigate, onLogout, onNoteCreate
       }
 
       setIsRecording(false);
-      // Processing is now triggered by mediaRecorder.onstop
+      // Processing is now triggered by mediaRecorder.onstop with the captured duration
     }
   };
 
-  const processRecording = async (blob?: Blob) => {
+  const processRecording = async (blob?: Blob, recordedDuration?: number) => {
     const recordingBlob = blob || audioBlob;
+    const duration = recordedDuration !== undefined ? recordedDuration : recordingTime;
+    
     if (!recordingBlob) {
       toast.error('No recording found');
       return;
@@ -139,14 +148,21 @@ export default function RecordingPage({ user, onNavigate, onLogout, onNoteCreate
         chiefComplaint,
         noteType,
         date: new Date().toISOString(),
-        duration: recordingTime,
+        duration: duration, // Use the passed duration
         content: noteContent
       };
 
-      // Also save to localStorage for offline support
+      console.log('Creating note with duration:', {
+        recordedDuration,
+        recordingTime,
+        duration: note.duration,
+        durationInMinutes: Math.floor(note.duration / 60)
+      });
+
+      // Save to database
       try {
         const userId = user.id || generateUniqueId();
-        await saveNote(userId, {
+        const savedNote = await saveNote(userId, {
           patientName: note.patientName,
           patientAge: note.patientAge,
           chiefComplaint: note.chiefComplaint,
@@ -154,9 +170,14 @@ export default function RecordingPage({ user, onNavigate, onLogout, onNoteCreate
           duration: note.duration,
           content: note.content
         });
+        
+        console.log('Note saved to database:', {
+          savedNote,
+          duration: savedNote?.duration
+        });
       } catch (dbErr) {
         console.error('Error saving to database:', dbErr);
-        // Continue anyway - note will still be saved to localStorage via parent callback
+        // Continue anyway - note will still be used via parent callback
       }
 
       setIsProcessing(false);

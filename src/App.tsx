@@ -103,6 +103,7 @@ function App() {
           note={currentNote}
           onNavigate={navigateTo} 
           onLogout={handleLogout}
+          onNoteDeleted={() => setCurrentNote(null)}
         />
       )}
       {currentPage === 'past-notes' && user && (

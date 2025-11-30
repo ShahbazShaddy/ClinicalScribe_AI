@@ -18,11 +18,11 @@ CREATE TABLE IF NOT EXISTS notes (
   patient_age VARCHAR(50),
   chief_complaint TEXT,
   note_type VARCHAR(50) NOT NULL DEFAULT 'SOAP',
-  duration INTEGER DEFAULT 0,
+  duration INTEGER NOT NULL DEFAULT 0,
   content JSONB NOT NULL DEFAULT '{}',
   transcription TEXT,
   audio_url TEXT,
-  is_archived BOOLEAN DEFAULT FALSE,
+  is_archived BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
 );

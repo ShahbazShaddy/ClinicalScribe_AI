@@ -203,16 +203,23 @@ export function useDatabase() {
 
   const removeNote = useCallback(async (noteId: string): Promise<boolean> => {
     if (!isConfigured) {
-      setError('Database not configured');
+      const errorMsg = 'Database not configured';
+      setError(errorMsg);
+      console.error(errorMsg);
       return false;
     }
 
     setIsLoading(true);
     setError(null);
     try {
-      return await deleteNote(noteId);
+      console.log('Deleting note with ID:', noteId);
+      const result = await deleteNote(noteId);
+      console.log('Delete operation result:', result);
+      return result;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete note');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to delete note';
+      setError(errorMessage);
+      console.error('Error in removeNote:', errorMessage, err);
       return false;
     } finally {
       setIsLoading(false);

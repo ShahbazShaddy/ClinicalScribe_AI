@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Search, FileText, Filter } from 'lucide-react';
+import { Search, FileText, Filter, Trash2 } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent } from '@/components/ui/card';
 import { useDatabase } from '@/hooks/useDatabase';
+import { toast } from 'sonner';
 import type { User, Page, Note } from '@/App';
 
 interface PastNotesPageProps {
@@ -20,7 +21,8 @@ export default function PastNotesPage({ user, onNavigate, onLogout, onNoteSelect
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
   const [isLoading, setIsLoading] = useState(true);
-  const { fetchNotes, isLoading: dbLoading } = useDatabase();
+  const [deletingNoteId, setDeletingNoteId] = useState<string | null>(null);
+  const { fetchNotes, isLoading: dbLoading, removeNote } = useDatabase();
 
   useEffect(() => {
     const loadNotes = async () => {
@@ -38,6 +40,30 @@ export default function PastNotesPage({ user, onNavigate, onLogout, onNoteSelect
     };
     loadNotes();
   }, [user.id, fetchNotes]);
+
+  const handleDeleteNote = async (noteId: string, patientName: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    if (!confirm(`Are you sure you want to delete the note for ${patientName}? This action cannot be undone.`)) {
+      return;
+    }
+
+    setDeletingNoteId(noteId);
+    try {
+      const success = await removeNote(noteId);
+      if (success) {
+        setNotes(notes.filter(note => note.id !== noteId));
+        toast.success('Note deleted successfully');
+      } else {
+        toast.error('Failed to delete note');
+      }
+    } catch (err) {
+      console.error('Error deleting note:', err);
+      toast.error('Failed to delete note');
+    } finally {
+      setDeletingNoteId(null);
+    }
+  };
 
   const filteredNotes = notes.filter(note => {
     const matchesSearch = note.patientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -150,9 +176,21 @@ export default function PastNotesPage({ user, onNavigate, onLogout, onNoteSelect
                       </div>
                     </div>
 
-                    <Button variant="ghost" size="sm" className="whitespace-nowrap">
-                      View Note
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button variant="ghost" size="sm" className="whitespace-nowrap">
+                        View Note
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="whitespace-nowrap text-destructive hover:text-destructive hover:bg-destructive/10"
+                        onClick={(e) => handleDeleteNote(note.id, note.patientName, e)}
+                        disabled={deletingNoteId === note.id}
+                      >
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        {deletingNoteId === note.id ? 'Deleting...' : 'Delete'}
+                      </Button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>

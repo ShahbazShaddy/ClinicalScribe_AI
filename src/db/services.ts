@@ -109,6 +109,9 @@ export async function createNote(noteData: Omit<NewNote, 'id' | 'createdAt' | 'u
     return null;
   }
 
+  // Ensure duration is a number and not null
+  const duration = typeof noteData.duration === 'number' ? noteData.duration : parseInt(String(noteData.duration || 0), 10);
+
   const { data, error } = await supabase
     .from('notes')
     .insert({
@@ -117,7 +120,7 @@ export async function createNote(noteData: Omit<NewNote, 'id' | 'createdAt' | 'u
       patient_age: noteData.patientAge,
       chief_complaint: noteData.chiefComplaint,
       note_type: noteData.noteType,
-      duration: noteData.duration,
+      duration: duration,
       content: noteData.content,
       transcription: noteData.transcription,
       audio_url: noteData.audioUrl,
@@ -186,7 +189,10 @@ export async function updateNote(id: string, updates: Partial<Note>): Promise<No
   if (updates.patientAge !== undefined) dbUpdates.patient_age = updates.patientAge;
   if (updates.chiefComplaint !== undefined) dbUpdates.chief_complaint = updates.chiefComplaint;
   if (updates.noteType !== undefined) dbUpdates.note_type = updates.noteType;
-  if (updates.duration !== undefined) dbUpdates.duration = updates.duration;
+  if (updates.duration !== undefined) {
+    // Ensure duration is a number
+    dbUpdates.duration = typeof updates.duration === 'number' ? updates.duration : parseInt(String(updates.duration || 0), 10);
+  }
   if (updates.content !== undefined) dbUpdates.content = updates.content;
   if (updates.transcription !== undefined) dbUpdates.transcription = updates.transcription;
   if (updates.audioUrl !== undefined) dbUpdates.audio_url = updates.audioUrl;
@@ -209,20 +215,29 @@ export async function updateNote(id: string, updates: Partial<Note>): Promise<No
 
 export async function deleteNote(id: string): Promise<boolean> {
   if (!isSupabaseConfigured()) {
+    console.warn('Supabase not configured');
     return false;
   }
 
-  const { error } = await supabase
-    .from('notes')
-    .delete()
-    .eq('id', id);
+  try {
+    console.log('Deleting note from database with ID:', id);
+    const { data, error } = await supabase
+      .from('notes')
+      .delete()
+      .eq('id', id)
+      .select();
 
-  if (error) {
-    console.error('Error deleting note:', error);
-    throw error;
+    if (error) {
+      console.error('Supabase delete error:', error);
+      throw error;
+    }
+
+    console.log('Note deleted successfully:', data);
+    return true;
+  } catch (err) {
+    console.error('Error deleting note:', err);
+    throw err;
   }
-
-  return true;
 }
 
 export async function archiveNote(id: string): Promise<Note | null> {
@@ -355,6 +370,9 @@ export function dbNoteToAppNote(dbNote: any): {
     cpt?: string;
   };
 } {
+  // Ensure duration is always a number
+  const duration = typeof dbNote.duration === 'number' ? dbNote.duration : parseInt(String(dbNote.duration || 0), 10);
+  
   return {
     id: dbNote.id,
     patientName: dbNote.patient_name,
@@ -362,7 +380,7 @@ export function dbNoteToAppNote(dbNote: any): {
     chiefComplaint: dbNote.chief_complaint,
     noteType: dbNote.note_type,
     date: dbNote.created_at,
-    duration: dbNote.duration || 0,
+    duration: duration,
     content: dbNote.content || {},
   };
 }
