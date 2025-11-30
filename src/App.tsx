@@ -7,8 +7,9 @@ import RecordingPage from '@/pages/RecordingPage';
 import NotePage from '@/pages/NotePage';
 import PastNotesPage from '@/pages/PastNotesPage';
 import SettingsPage from '@/pages/SettingsPage';
+import ChatPage from '@/pages/ChatPage';
 
-export type Page = 'landing' | 'auth' | 'dashboard' | 'recording' | 'note' | 'past-notes' | 'settings';
+export type Page = 'landing' | 'auth' | 'dashboard' | 'recording' | 'note' | 'past-notes' | 'settings' | 'chat';
 
 export interface User {
   id?: string;
@@ -119,6 +120,9 @@ function App() {
       )}
       {currentPage === 'settings' && user && (
         <SettingsPage user={user} onNavigate={navigateTo} onLogout={handleLogout} />
+      )}
+      {currentPage === 'chat' && user && (
+        <ChatPage user={user} onNavigate={navigateTo} onLogout={handleLogout} />
       )}
       <Toaster />
     </>

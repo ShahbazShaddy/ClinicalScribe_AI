@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Shield, User, FileText, HardDrive } from 'lucide-react';
+import { Shield, UserIcon, FileText, HardDrive } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -104,7 +104,7 @@ export default function SettingsPage({ user, onNavigate, onLogout }: SettingsPag
         <Card>
           <CardHeader>
             <div className="flex items-center gap-2">
-              <User className="w-5 h-5 text-primary" />
+              <UserIcon className="w-5 h-5 text-primary" />
               <CardTitle>Profile Information</CardTitle>
             </div>
             <CardDescription>

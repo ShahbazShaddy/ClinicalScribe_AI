@@ -1,4 +1,4 @@
-import { LayoutDashboard, Mic, FileText, Settings, LogOut, Stethoscope, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Mic, FileText, Settings, LogOut, Stethoscope, Menu, X, MessageCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useState } from 'react';
 import type { User, Page } from '@/App';
@@ -18,6 +18,7 @@ export default function DashboardLayout({ user, currentPage, onNavigate, onLogou
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'recording', label: 'New Recording', icon: Mic },
     { id: 'past-notes', label: 'Past Notes', icon: FileText },
+    { id: 'chat', label: 'AI Assistant', icon: MessageCircle },
     { id: 'settings', label: 'Settings', icon: Settings },
   ];
 
