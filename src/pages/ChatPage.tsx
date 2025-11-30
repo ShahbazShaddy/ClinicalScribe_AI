@@ -101,10 +101,10 @@ export default function ChatPage({ user, onNavigate, onLogout }: ChatPageProps) 
 
   return (
     <DashboardLayout user={user} currentPage="chat" onNavigate={onNavigate} onLogout={onLogout}>
-      <div className="h-full flex gap-4">
+      <div className="h-[calc(100vh-140px)] flex gap-4">
         {/* Chat Sidebar - Desktop */}
-        <aside className="hidden lg:flex flex-col w-64 border border-border rounded-lg bg-card">
-          <div className="p-4 border-b">
+        <aside className="hidden lg:flex flex-col w-64 border border-border rounded-lg bg-card overflow-hidden">
+          <div className="p-4 border-b flex-shrink-0">
             <Button
               onClick={handleNewChat}
               className="w-full"
@@ -115,7 +115,7 @@ export default function ChatPage({ user, onNavigate, onLogout }: ChatPageProps) 
             </Button>
           </div>
 
-          <ScrollArea className="flex-1">
+          <ScrollArea className="flex-1 overflow-hidden">
             <div className="p-2 space-y-2">
               {sessions.length === 0 ? (
                 <p className="text-xs text-muted-foreground text-center py-4">
@@ -142,7 +142,7 @@ export default function ChatPage({ user, onNavigate, onLogout }: ChatPageProps) 
                     <button
                       onClick={(e) => handleDeleteSession(session.id, e)}
                       className={cn(
-                        'ml-2 p-1 rounded hover:bg-destructive/20',
+                        'ml-2 p-1 rounded hover:bg-destructive/20 flex-shrink-0',
                         currentSessionId === session.id
                           ? 'text-primary-foreground'
                           : 'text-muted-foreground'
@@ -158,9 +158,9 @@ export default function ChatPage({ user, onNavigate, onLogout }: ChatPageProps) 
         </aside>
 
         {/* Chat Area */}
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col overflow-hidden">
           {/* Mobile Header */}
-          <div className="lg:hidden flex items-center gap-2 mb-4 p-4 border border-border rounded-lg bg-card">
+          <div className="lg:hidden flex items-center gap-2 mb-4 p-4 border border-border rounded-lg bg-card flex-shrink-0">
             <Button
               onClick={handleNewChat}
               size="sm"
@@ -180,7 +180,7 @@ export default function ChatPage({ user, onNavigate, onLogout }: ChatPageProps) 
 
           {/* Mobile Sidebar */}
           {isMobileSidebarOpen && (
-            <div className="lg:hidden mb-4 p-4 border border-border rounded-lg bg-card">
+            <div className="lg:hidden mb-4 p-4 border border-border rounded-lg bg-card max-h-64 overflow-hidden flex-shrink-0">
               <ScrollArea className="h-64">
                 <div className="space-y-2">
                   {sessions.length === 0 ? (
@@ -211,7 +211,7 @@ export default function ChatPage({ user, onNavigate, onLogout }: ChatPageProps) 
                         <button
                           onClick={(e) => handleDeleteSession(session.id, e)}
                           className={cn(
-                            'ml-2 p-1 rounded hover:bg-destructive/20',
+                            'ml-2 p-1 rounded hover:bg-destructive/20 flex-shrink-0',
                             currentSessionId === session.id
                               ? 'text-primary-foreground'
                               : 'text-muted-foreground'
@@ -229,13 +229,15 @@ export default function ChatPage({ user, onNavigate, onLogout }: ChatPageProps) 
 
           {/* Chat Content */}
           {currentSessionId ? (
-            <ChatBot
-              messages={messages}
-              isLoading={isLoading}
-              onSendMessage={handleSendMessage}
-              title="Clinical Assistant"
-              description="Ask questions about your patients and get clinical assistance"
-            />
+            <div className="flex-1 overflow-hidden">
+              <ChatBot
+                messages={messages}
+                isLoading={isLoading}
+                onSendMessage={handleSendMessage}
+                title="Clinical Assistant"
+                description="Ask questions about your patients and get clinical assistance"
+              />
+            </div>
           ) : (
             <div className="flex items-center justify-center h-full text-center">
               <div>

@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Loader2, Send } from 'lucide-react';
+import { Loader2, Send, Copy, Share2, RefreshCcw, ThumbsUp, ThumbsDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 // Simple markdown to HTML converter
@@ -54,6 +54,8 @@ interface ChatBotProps {
   placeholder?: string;
   title?: string;
   description?: string;
+  onRegenerate?: (message: ChatMessage) => Promise<void> | void;
+  onFeedback?: (message: ChatMessage, feedback: 'up' | 'down') => Promise<void> | void;
 }
 
 export function ChatBot({
@@ -62,10 +64,13 @@ export function ChatBot({
   onSendMessage,
   placeholder = "Ask me anything about your patients...",
   title = "Clinical Assistant",
-  description = "Ask questions and get assistance with patient information and clinical decisions"
+  description = "Ask questions and get assistance with patient information and clinical decisions",
+  onRegenerate,
+  onFeedback,
 }: ChatBotProps) {
   const [inputValue, setInputValue] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when messages change
@@ -95,9 +100,50 @@ export function ChatBot({
     }
   };
 
+  const handleCopy = async (content: string, id: string) => {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopiedMessageId(id);
+      setTimeout(() => setCopiedMessageId(null), 1500);
+    } catch (error) {
+      console.error('Failed to copy message:', error);
+    }
+  };
+
+  const handleShare = async (content: string) => {
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: 'Clinical Assistant Message',
+          text: content,
+        });
+      } else {
+        await navigator.clipboard.writeText(content);
+      }
+    } catch (error) {
+      console.error('Failed to share message:', error);
+    }
+  };
+
+  const handleRegenerate = async (message: ChatMessage) => {
+    if (onRegenerate) {
+      await onRegenerate(message);
+    } else {
+      console.info('Regenerate handler not implemented.', message);
+    }
+  };
+
+  const handleFeedback = async (message: ChatMessage, feedback: 'up' | 'down') => {
+    if (onFeedback) {
+      await onFeedback(message, feedback);
+    } else {
+      console.info('Feedback recorded:', feedback, message);
+    }
+  };
+
   return (
-    <Card className="h-full flex flex-col bg-gradient-to-b from-background to-muted/20">
-      <CardHeader className="border-b">
+    <Card className="h-full w-full flex flex-col bg-gradient-to-b from-background to-muted/20 overflow-hidden">
+      <CardHeader className="border-b flex-shrink-0">
         <div className="flex items-center justify-between">
           <div>
             <CardTitle>{title}</CardTitle>
@@ -106,9 +152,9 @@ export function ChatBot({
         </div>
       </CardHeader>
 
-      <CardContent className="flex-1 flex flex-col p-0 min-h-0">
+      <CardContent className="flex-1 flex flex-col p-0 min-h-0 overflow-hidden">
         {/* Messages Area */}
-        <ScrollArea className="flex-1 w-full">
+        <ScrollArea className="flex-1 w-full overflow-hidden">
           <div className="p-4 space-y-4">
             {messages.length === 0 ? (
               <div className="flex items-center justify-center h-96 text-center text-muted-foreground">
@@ -119,38 +165,102 @@ export function ChatBot({
               </div>
             ) : (
               <>
-                {messages.map((message, index) => (
-                  <div
-                    key={message.id || index}
-                    className={cn(
-                      'flex w-full',
-                      message.role === 'user' ? 'justify-end' : 'justify-start'
-                    )}
-                  >
+                {messages.map((message, index) => {
+                  const messageId = message.id || `msg-${index}`;
+                  const isAssistant = message.role === 'assistant';
+
+                  return (
                     <div
+                      key={messageId}
                       className={cn(
-                        'max-w-xs lg:max-w-md px-4 py-2 rounded-lg',
-                        message.role === 'user'
-                          ? 'bg-primary text-primary-foreground rounded-br-none'
-                          : 'bg-muted text-muted-foreground rounded-bl-none'
+                        'flex w-full flex-col',
+                        message.role === 'user' ? 'items-end' : 'items-start'
                       )}
                     >
-                      {message.role === 'assistant' ? (
-                        <div 
-                          className="text-sm leading-relaxed prose prose-sm dark:prose-invert max-w-none [&_strong]:font-bold [&_em]:italic [&_h1]:text-lg [&_h2]:text-base [&_h3]:text-sm [&_ul]:list-disc [&_ol]:list-decimal [&_li]:ml-4 [&_code]:bg-black/20 [&_code]:px-1 [&_code]:rounded [&_pre]:bg-black/20 [&_pre]:p-2 [&_pre]:rounded [&_pre]:overflow-x-auto"
-                          dangerouslySetInnerHTML={{ __html: markdownToHtml(message.content) }}
-                        />
-                      ) : (
-                        <p className="text-sm leading-relaxed">{message.content}</p>
-                      )}
-                      {message.timestamp && (
-                        <p className="text-xs opacity-70 mt-1">
-                          {new Date(message.timestamp).toLocaleTimeString()}
-                        </p>
+                      <div
+                        className={cn(
+                          'max-w-xs lg:max-w-md px-4 py-2 rounded-lg transition-shadow',
+                          message.role === 'user'
+                            ? 'bg-primary text-primary-foreground rounded-br-none'
+                            : 'bg-muted text-muted-foreground rounded-bl-none'
+                        )}
+                      >
+                        {isAssistant ? (
+                          <div 
+                            className="text-sm leading-relaxed prose prose-sm dark:prose-invert max-w-none [&_strong]:font-bold [&_em]:italic [&_h1]:text-lg [&_h2]:text-base [&_h3]:text-sm [&_ul]:list-disc [&_ol]:list-decimal [&_li]:ml-4 [&_code]:bg-black/20 [&_code]:px-1 [&_code]:rounded [&_pre]:bg-black/20 [&_pre]:p-2 [&_pre]:rounded [&_pre]:overflow-x-auto"
+                            dangerouslySetInnerHTML={{ __html: markdownToHtml(message.content) }}
+                          />
+                        ) : (
+                          <p className="text-sm leading-relaxed">{message.content}</p>
+                        )}
+                        {message.timestamp && (
+                          <p className="text-xs opacity-70 mt-1">
+                            {new Date(message.timestamp).toLocaleTimeString()}
+                          </p>
+                        )}
+                      </div>
+
+                      <div
+                        className={cn(
+                          'mt-2 flex items-center gap-2 px-2 py-1 text-muted-foreground',
+                          message.role === 'user' ? 'flex-row-reverse justify-end' : 'flex-row justify-start'
+                        )}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => handleCopy(message.content, messageId)}
+                          aria-label="Copy message"
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-accent transition-colors"
+                        >
+                          <Copy className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleShare(message.content)}
+                          aria-label="Share message"
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-accent transition-colors"
+                        >
+                          <Share2 className="h-4 w-4" />
+                        </button>
+                        {isAssistant && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => handleRegenerate(message)}
+                              aria-label="Regenerate response"
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-accent transition-colors"
+                            >
+                              <RefreshCcw className="h-4 w-4" />
+                            </button>
+                            <span className="mx-0.5 h-4 w-px bg-border" aria-hidden="true" />
+                            <button
+                              type="button"
+                              onClick={() => handleFeedback(message, 'up')}
+                              aria-label="Thumbs up"
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-accent transition-colors"
+                            >
+                              <ThumbsUp className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleFeedback(message, 'down')}
+                              aria-label="Thumbs down"
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-accent transition-colors"
+                            >
+                              <ThumbsDown className="h-4 w-4" />
+                            </button>
+                          </>
+                        )}
+                      </div>
+
+                      {copiedMessageId === messageId && (
+                        <div className="mt-1 text-xs text-muted-foreground">
+                          Copied!
+                        </div>
                       )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
                 {isLoading && (
                   <div className="flex justify-start">
                     <div className="bg-muted text-muted-foreground rounded-lg rounded-bl-none px-4 py-2">
@@ -168,7 +278,7 @@ export function ChatBot({
         </ScrollArea>
 
         {/* Input Area */}
-        <div className="border-t p-4 bg-background">
+        <div className="border-t p-4 bg-background flex-shrink-0">
           <form onSubmit={handleSubmit} className="flex gap-2">
             <Input
               value={inputValue}
