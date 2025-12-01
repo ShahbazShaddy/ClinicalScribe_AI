@@ -1,5 +1,6 @@
 import Groq from 'groq-sdk';
 import ENV from '@/config/env';
+import { getNoteTemplate } from '@/config/noteTemplates';
 
 let client: Groq | null = null;
 
@@ -194,78 +195,153 @@ Return ONLY valid JSON, no additional text.`;
 }
 
 /**
- * Generate structured SOAP note content from transcribed text
+ * Extract patient information from transcribed text
  * @param transcribedText - The transcribed clinical conversation
- * @param noteType - Type of note to generate
- * @returns Structured note content object
+ * @returns Extracted patient information (name, age, chief complaint)
  */
-export async function generateStructuredNote(
-  transcribedText: string,
-  noteType: 'SOAP' | 'Progress' | 'Consultation' | 'H&P' = 'SOAP'
-): Promise<{
-  subjective: string;
-  objective: string;
-  assessment: string;
-  plan: string;
-  icd10: string;
-  cpt: string;
-}> {
-  const systemPrompt = `You are a clinical documentation specialist. Generate a structured ${noteType} note from the transcribed patient conversation.
+export async function extractPatientInfo(
+  transcribedText: string
+): Promise<{ name?: string; age?: string; chiefComplaint?: string }> {
+  const systemPrompt = `You are a clinical documentation specialist. Extract patient information from the transcribed clinical conversation.
 
-Return a JSON object with these exact keys:
-- subjective: Patient's reported symptoms, history, and concerns (what the patient tells you)
-- objective: Clinical findings, vital signs, physical exam findings, test results
-- assessment: Clinical impression, diagnosis, differential diagnoses
-- plan: Treatment plan, medications, follow-up instructions, referrals
-- icd10: Relevant ICD-10 diagnosis codes (format: "Code - Description" on separate lines)
-- cpt: Relevant CPT procedure codes (format: "Code - Description" on separate lines)
+Analyze the conversation and extract:
+- Patient name: The patient's full name or identifier
+- Patient age: The patient's age (numeric value only, e.g., "45" not "45 years old")
+- Chief complaint: The primary reason for the visit or main concern
 
-Be thorough and professional. If information is not available in the transcript, indicate "Not documented" for that section.
-Return ONLY valid JSON, no additional text or markdown.`;
+Return a JSON object with these keys (use null for any missing information):
+{
+  "name": "patient name or null",
+  "age": "numeric age or null",
+  "chief_complaint": "chief complaint or null"
+}
+
+Rules:
+- Only extract information explicitly mentioned in the conversation
+- For age, return only the numeric value (e.g., "35" not "35 years")
+- For chief complaint, extract the main concern in 1-2 sentences
+- Use null for any field not mentioned in the audio
+- Return ONLY valid JSON, no markdown or code blocks`;
 
   const messages: Message[] = [
     {
       role: 'user',
-      content: `Generate a structured ${noteType} note from this transcribed patient conversation:\n\n${transcribedText}`,
+      content: `Extract patient information from this clinical conversation:\n\n${transcribedText}`,
+    },
+  ];
+
+  try {
+    const response = await generateText(messages, systemPrompt, 0.2, 512);
+    console.log('📋 Patient Info Extraction Response:', response);
+
+    // Try to extract JSON from the response
+    const jsonMatch = response.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      console.log('✅ Successfully extracted patient info:', {
+        name: parsed.name,
+        age: parsed.age,
+        chief_complaint: parsed.chief_complaint
+      });
+
+      return {
+        name: parsed.name || undefined,
+        age: parsed.age || undefined,
+        chiefComplaint: parsed.chief_complaint || undefined,
+      };
+    }
+
+    console.warn('⚠️ Could not extract JSON for patient info');
+    return {};
+  } catch (error) {
+    console.error('❌ Error extracting patient info:', error);
+    return {};
+  }
+}
+
+
+export async function generateStructuredNote(
+  transcribedText: string
+): Promise<Record<string, string>> {
+  const systemPrompt = `You are a clinical documentation specialist. Analyze the transcribed clinical conversation and extract relevant clinical information.
+
+IMPORTANT: Generate sections dynamically based on what's actually discussed in the conversation. Do NOT force any predefined structure.
+
+Analyze the content and create appropriate sections. For example:
+- If patient history is discussed: create "Patient History" section
+- If physical exam is mentioned: create "Physical Examination" section  
+- If treatment is discussed: create "Treatment Plan" section
+- If diagnoses are mentioned: create "Assessment/Diagnosis" section
+- If specific concerns are raised: create sections for those concerns
+- If follow-up is discussed: create "Follow-up" section
+- If billing codes are relevant: create "ICD-10/CPT Codes" section
+
+Return a JSON object where:
+- Each key is a section title (in snake_case, e.g., "patient_history", "physical_exam", "assessment")
+- Each value is the detailed content for that section
+
+Example format:
+{
+  "chief_complaint": "Patient's main concern in brief",
+  "patient_history": "Relevant medical and social history",
+  "physical_examination": "Physical exam findings",
+  "assessment_and_plan": "Clinical impression and treatment approach",
+  "follow_up": "Follow-up instructions"
+}
+
+Rules:
+- Only include sections that are actually relevant to the conversation
+- Use descriptive snake_case keys that indicate the section content
+- If information is minimal or not discussed, omit that section entirely
+- Return ONLY valid JSON, no markdown, no code blocks
+- Ensure all string values are properly escaped for JSON`;
+
+  const messages: Message[] = [
+    {
+      role: 'user',
+      content: `Analyze this clinical conversation and extract relevant sections dynamically:\n\n${transcribedText}`,
     },
   ];
 
   try {
     const response = await generateText(messages, systemPrompt, 0.3, 2048);
-    console.log('AI Response:', response);
-    
+    console.log('📝 Raw AI Response:', response.substring(0, 300) + '...');
+
     // Try to extract JSON from the response
     const jsonMatch = response.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]);
-      return {
-        subjective: parsed.subjective || 'Not documented',
-        objective: parsed.objective || 'Not documented',
-        assessment: parsed.assessment || 'Not documented',
-        plan: parsed.plan || 'Not documented',
-        icd10: parsed.icd10 || 'Not documented',
-        cpt: parsed.cpt || 'Not documented',
-      };
+      console.log('✅ Successfully parsed dynamic sections with keys:', Object.keys(parsed));
+      
+      // Use the dynamically generated sections as-is
+      const result: Record<string, string> = parsed;
+      
+      console.log('🎯 Final flexible note structure with sections:', {
+        generatedSections: Object.keys(result),
+        sectionCount: Object.keys(result).length
+      });
+      
+      return result;
     }
+
+    console.warn('⚠️ Could not extract JSON from response');
+
+    // If JSON parsing fails, return the raw text as a single section
+    const fallback: Record<string, string> = {
+      'clinical_notes': response
+    };
     
-    // If JSON parsing fails, return a structured response with the raw text
-    return {
-      subjective: response,
-      objective: 'Unable to parse structured response',
-      assessment: 'Please review and edit manually',
-      plan: 'Please review and edit manually',
-      icd10: 'Not documented',
-      cpt: 'Not documented',
-    };
+    console.log('🔄 Using fallback with single section');
+    return fallback;
   } catch (error) {
-    console.error('Error generating structured note:', error);
-    return {
-      subjective: 'Error generating note content',
-      objective: 'Please try again or enter manually',
-      assessment: 'Error occurred during AI processing',
-      plan: 'Please review and complete manually',
-      icd10: 'Not documented',
-      cpt: 'Not documented',
+    console.error('❌ Error generating flexible note:', error);
+
+    // Return error state
+    const errorResult: Record<string, string> = {
+      'error': 'Error generating note content. Please try again or enter manually.'
     };
+    
+    console.error('⛔ Error generating note');
+    return errorResult;
   }
 }

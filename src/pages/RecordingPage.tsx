@@ -2,9 +2,6 @@ import { useState, useRef, useEffect } from 'react';
 import { Mic, Square, Loader2, AlertCircle } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { toast } from 'sonner';
@@ -24,10 +21,6 @@ export default function RecordingPage({ user, onNavigate, onLogout, onNoteCreate
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
-  const [patientName, setPatientName] = useState('');
-  const [patientAge, setPatientAge] = useState('');
-  const [chiefComplaint, setChiefComplaint] = useState('');
-  const [noteType, setNoteType] = useState<'SOAP' | 'Progress' | 'Consultation' | 'H&P'>('SOAP');
   const [processingStep, setProcessingStep] = useState('');
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   
@@ -39,6 +32,7 @@ export default function RecordingPage({ user, onNavigate, onLogout, onNoteCreate
   const { 
     transcribeClinicalRecording, 
     generateStructuredNoteContent,
+    extractPatientInfoFromAudio,
     error: aiError,
     clearError 
   } = useAI();
@@ -133,28 +127,39 @@ export default function RecordingPage({ user, onNavigate, onLogout, onNoteCreate
       const transcribedText = await transcribeClinicalRecording(recordingBlob);
       console.log('Transcribed text:', transcribedText);
       
-      // Step 2: Generate structured clinical note
-      setProcessingStep('Generating structured clinical note...');
-      const noteContent = await generateStructuredNoteContent(transcribedText, noteType);
+      // Step 2: Extract patient information from audio
+      setProcessingStep('Extracting patient information...');
+      console.log('📋 Extracting patient info from audio');
+      const patientInfo = await extractPatientInfoFromAudio(transcribedText);
+      console.log('Extracted patient info:', patientInfo);
+      
+      // Step 3: Generate dynamic note sections based on content
+      setProcessingStep('Analyzing content and generating note sections...');
+      console.log('📋 Generating flexible note structure based on audio content');
+      const noteContent = await generateStructuredNoteContent(transcribedText);
+      console.log('Generated dynamic sections:', Object.keys(noteContent));
       console.log('Generated note content:', noteContent);
       
-      // Step 3: Create note
+      // Step 4: Create note with extracted patient info
       setProcessingStep('Creating clinical note...');
 
       const note: Note = {
         id: generateUniqueId(),
-        patientName: patientName || `Patient-${generateUniqueId()}`,
-        patientAge,
-        chiefComplaint,
-        noteType,
+        patientName: patientInfo.name || `Patient-${generateUniqueId()}`,
+        patientAge: patientInfo.age,
+        chiefComplaint: patientInfo.chiefComplaint,
+        noteType: 'Flexible', // Mark as flexible/dynamic
         date: new Date().toISOString(),
-        duration: duration, // Use the passed duration
+        duration: duration,
         content: noteContent
       };
 
-      console.log('Creating note with duration:', {
-        recordedDuration,
-        recordingTime,
+      console.log('Creating note with extracted patient info:', {
+        patientName: note.patientName,
+        patientAge: note.patientAge,
+        chiefComplaint: note.chiefComplaint,
+        sections: Object.keys(note.content),
+        sectionCount: Object.keys(note.content).length,
         duration: note.duration,
         durationInMinutes: Math.floor(note.duration / 60)
       });
@@ -186,9 +191,6 @@ export default function RecordingPage({ user, onNavigate, onLogout, onNoteCreate
       toast.success('Clinical note generated successfully');
       
       // Reset form
-      setPatientName('');
-      setPatientAge('');
-      setChiefComplaint('');
       setAudioBlob(null);
     } catch (err) {
       console.error('Processing error:', err);
@@ -221,67 +223,6 @@ export default function RecordingPage({ user, onNavigate, onLogout, onNoteCreate
             <AlertDescription>{aiError}</AlertDescription>
           </Alert>
         )}
-
-        {/* Patient Information Form */}
-        <Card>
-          <CardContent className="p-6 space-y-4">
-            <h2 className="text-xl font-semibold mb-4">Patient Information (Optional)</h2>
-            
-            <div className="grid md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="patientName">Patient Name</Label>
-                <Input
-                  id="patientName"
-                  placeholder="John Doe"
-                  value={patientName}
-                  onChange={(e) => setPatientName(e.target.value)}
-                  disabled={isRecording || isProcessing}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="patientAge">Age</Label>
-                <Input
-                  id="patientAge"
-                  placeholder="45"
-                  value={patientAge}
-                  onChange={(e) => setPatientAge(e.target.value)}
-                  disabled={isRecording || isProcessing}
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="chiefComplaint">Chief Complaint</Label>
-              <Input
-                id="chiefComplaint"
-                placeholder="e.g., Lower back pain"
-                value={chiefComplaint}
-                onChange={(e) => setChiefComplaint(e.target.value)}
-                disabled={isRecording || isProcessing}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Note Type</Label>
-              <Select 
-                value={noteType} 
-                onValueChange={(value: any) => setNoteType(value)}
-                disabled={isRecording || isProcessing}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="SOAP">SOAP Note</SelectItem>
-                  <SelectItem value="Progress">Progress Note</SelectItem>
-                  <SelectItem value="Consultation">Consultation Note</SelectItem>
-                  <SelectItem value="H&P">H&P (History & Physical)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </CardContent>
-        </Card>
 
         {/* Recording Interface */}
         <Card className="border-2 border-primary">

@@ -8,8 +8,10 @@ import NotePage from '@/pages/NotePage';
 import PastNotesPage from '@/pages/PastNotesPage';
 import SettingsPage from '@/pages/SettingsPage';
 import ChatPage from '@/pages/ChatPage';
+import PatientsPage from '@/pages/PatientsPage';
+import PatientTimeline from '@/pages/PatientTimeline';
 
-export type Page = 'landing' | 'auth' | 'dashboard' | 'recording' | 'note' | 'past-notes' | 'settings' | 'chat';
+export type Page = 'landing' | 'auth' | 'dashboard' | 'recording' | 'note' | 'past-notes' | 'settings' | 'chat' | 'patients' | 'patient';
 
 export interface User {
   id?: string;
@@ -24,23 +26,29 @@ export interface Note {
   patientName: string;
   patientAge?: string;
   chiefComplaint?: string;
-  noteType: 'SOAP' | 'Progress' | 'Consultation' | 'H&P';
+  noteType: 'SOAP' | 'Progress' | 'Consultation' | 'H&P' | 'Flexible'; // Flexible for dynamic content
   date: string;
   duration: number;
-  content: {
-    subjective?: string;
-    objective?: string;
-    assessment?: string;
-    plan?: string;
-    icd10?: string;
-    cpt?: string;
-  };
+  content: Record<string, string>; // Dynamic key-value pairs for flexible sections
+}
+
+export interface Patient {
+  id: string;
+  name: string;
+  age: number;
+  gender: 'M' | 'F' | 'O';
+  diagnoses: string[];
+  medications: string[];
+  allergies?: string[];
+  lastVisit?: string;
+  visits?: any[];
 }
 
 function App() {
   const [currentPage, setCurrentPage] = useState<Page>('landing');
   const [user, setUser] = useState<User | null>(null);
   const [currentNote, setCurrentNote] = useState<Note | null>(null);
+  const [currentPatient, setCurrentPatient] = useState<Patient | null>(null);
 
   useEffect(() => {
     const savedUser = localStorage.getItem('clinicalscribe_user');
@@ -69,6 +77,11 @@ function App() {
   const handleNoteCreated = (note: Note) => {
     setCurrentNote(note);
     navigateTo('note');
+  };
+
+  const handlePatientSelect = (patient: Patient) => {
+    setCurrentPatient(patient);
+    navigateTo('patient');
   };
 
   return (
@@ -123,6 +136,12 @@ function App() {
       )}
       {currentPage === 'chat' && user && (
         <ChatPage user={user} onNavigate={navigateTo} onLogout={handleLogout} />
+      )}
+      {currentPage === 'patients' && user && (
+        <PatientsPage user={user} onNavigate={navigateTo} onViewPatient={handlePatientSelect} onLogout={handleLogout} />
+      )}
+      {currentPage === 'patient' && user && currentPatient && (
+        <PatientTimeline user={user} patient={currentPatient} onNavigate={navigateTo} onLogout={handleLogout} />
       )}
       <Toaster />
     </>

@@ -26,6 +26,13 @@ export default function NotePage({ user, note, onNavigate, onLogout, onNoteDelet
   const { editNote, saveNote, isLoading, removeNote } = useDatabase();
   const { generateStructuredNoteContent, isGenerating } = useAI();
 
+  // Debug logging on mount/update
+  console.log('📄 NotePage loaded with note:', {
+    noteType: note.noteType,
+    contentKeys: Object.keys(note.content),
+    contentLength: Object.keys(note.content).length
+  });
+
   const handleSave = async () => {
     setIsSaving(true);
     try {
@@ -107,15 +114,15 @@ export default function NotePage({ user, note, onNavigate, onLogout, onNoteDelet
         yPosition += wrappedText.length * 5 + 5;
       };
       
-      if (note.noteType === 'SOAP') {
-        addSection('SUBJECTIVE', editedNote.subjective || '');
-        addSection('OBJECTIVE', editedNote.objective || '');
-        addSection('ASSESSMENT', editedNote.assessment || '');
-        addSection('PLAN', editedNote.plan || '');
-      }
-      
-      addSection('ICD-10 Codes', editedNote.icd10 || '');
-      addSection('CPT Codes', editedNote.cpt || '');
+      // Dynamically add all sections from the content
+      Object.entries(editedNote).forEach(([key, value]) => {
+        // Convert snake_case to readable title
+        const title = key
+          .split('_')
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(' ');
+        addSection(title, value);
+      });
       
       const pageCount = (doc as any).internal.getNumberOfPages();
       for (let i = 1; i <= pageCount; i++) {
@@ -139,7 +146,7 @@ export default function NotePage({ user, note, onNavigate, onLogout, onNoteDelet
         .map(([key, value]) => `${key}: ${value}`)
         .join('\n\n');
       
-      const newContent = await generateStructuredNoteContent(currentContent, note.noteType);
+      const newContent = await generateStructuredNoteContent(currentContent);
       setEditedNote(newContent);
       toast.success('Note regenerated successfully');
     } catch (err) {
@@ -267,52 +274,33 @@ export default function NotePage({ user, note, onNavigate, onLogout, onNoteDelet
           </Button>
         </div>
 
-        {/* Note Content */}
+        {/* Note Content - Render all sections dynamically based on content */}
         <div className="space-y-6">
-          {note.noteType === 'SOAP' && (
-            <>
-              <NoteSection
-                title="Subjective"
-                content={editedNote.subjective || ''}
-                isEditing={isEditing}
-                onChange={(value) => setEditedNote({ ...editedNote, subjective: value })}
-              />
-              <NoteSection
-                title="Objective"
-                content={editedNote.objective || ''}
-                isEditing={isEditing}
-                onChange={(value) => setEditedNote({ ...editedNote, objective: value })}
-              />
-              <NoteSection
-                title="Assessment"
-                content={editedNote.assessment || ''}
-                isEditing={isEditing}
-                onChange={(value) => setEditedNote({ ...editedNote, assessment: value })}
-              />
-              <NoteSection
-                title="Plan"
-                content={editedNote.plan || ''}
-                isEditing={isEditing}
-                onChange={(value) => setEditedNote({ ...editedNote, plan: value })}
-              />
-            </>
-          )}
-
-          {/* ICD-10 and CPT Codes */}
-          <div className="grid md:grid-cols-2 gap-6">
-            <NoteSection
-              title="ICD-10 Codes"
-              content={editedNote.icd10 || ''}
-              isEditing={isEditing}
-              onChange={(value) => setEditedNote({ ...editedNote, icd10: value })}
-            />
-            <NoteSection
-              title="CPT Codes"
-              content={editedNote.cpt || ''}
-              isEditing={isEditing}
-              onChange={(value) => setEditedNote({ ...editedNote, cpt: value })}
-            />
-          </div>
+          {(() => {
+            const contentKeys = Object.keys(editedNote);
+            console.log('🎨 Rendering dynamic sections:', {
+              sectionCount: contentKeys.length,
+              sections: contentKeys
+            });
+            
+            // Convert snake_case keys to readable labels (e.g., "patient_history" -> "Patient History")
+            return contentKeys.map((key) => {
+              const label = key
+                .split('_')
+                .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                .join(' ');
+              
+              return (
+                <NoteSection
+                  key={key}
+                  title={label}
+                  content={editedNote[key] || ''}
+                  isEditing={isEditing}
+                  onChange={(value) => setEditedNote({ ...editedNote, [key]: value })}
+                />
+              );
+            });
+          })()}
         </div>
 
         {/* Disclaimer */}
@@ -362,6 +350,7 @@ function NoteSection({ title, content, isEditing, onChange }: NoteSectionProps) 
           <Textarea
             value={content}
             onChange={(e) => onChange(e.target.value)}
+            placeholder={`Enter ${title.toLowerCase()}...`}
             className="min-h-[150px] font-mono text-sm"
           />
         ) : (
