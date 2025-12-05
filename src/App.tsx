@@ -10,6 +10,7 @@ import SettingsPage from '@/pages/SettingsPage';
 import ChatPage from '@/pages/ChatPage';
 import PatientsPage from '@/pages/PatientsPage';
 import PatientTimeline from '@/pages/PatientTimeline';
+import type { StructuredData } from '@/types/structuredData';
 
 export type Page = 'landing' | 'auth' | 'dashboard' | 'recording' | 'note' | 'past-notes' | 'settings' | 'chat' | 'patients' | 'patient';
 
@@ -30,6 +31,8 @@ export interface Note {
   date: string;
   duration: number;
   content: Record<string, string>; // Dynamic key-value pairs for flexible sections
+  structuredData?: StructuredData; // Extracted vitals, clinical info, symptoms
+  previousVisitData?: StructuredData; // For trend comparison
 }
 
 export interface Patient {

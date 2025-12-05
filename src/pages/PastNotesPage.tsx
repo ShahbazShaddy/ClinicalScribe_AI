@@ -84,17 +84,17 @@ export default function PastNotesPage({ user, onNavigate, onLogout, onNoteSelect
 
   return (
     <DashboardLayout user={user} currentPage="past-notes" onNavigate={onNavigate} onLogout={onLogout}>
-      <div className="space-y-6 animate-fade-in">
+      <div className="space-y-4 sm:space-y-6 animate-fade-in">
         <div>
-          <h1 className="text-3xl font-bold mb-2">Past Notes</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl sm:text-3xl font-bold mb-1 sm:mb-2">Past Notes</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground">
             View and manage all your clinical documentation
           </p>
         </div>
 
         {/* Search and Filter */}
-        <div className="flex flex-col sm:flex-row gap-4">
-          <div className="relative flex-1">
+        <div className="flex flex-col gap-3 sm:gap-4">
+          <div className="relative w-full">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
               placeholder="Search by patient name or complaint..."
@@ -123,9 +123,9 @@ export default function PastNotesPage({ user, onNavigate, onLogout, onNoteSelect
         {filteredNotes.length === 0 ? (
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-12">
-              <FileText className="w-16 h-16 text-muted-foreground/30 mb-4" />
-              <h3 className="text-lg font-semibold mb-2">No notes found</h3>
-              <p className="text-muted-foreground text-center">
+              <FileText className="w-12 sm:w-16 h-12 sm:h-16 text-muted-foreground/30 mb-4" />
+              <h3 className="text-base sm:text-lg font-semibold mb-2">No notes found</h3>
+              <p className="text-xs sm:text-sm text-muted-foreground text-center px-4">
                 {searchTerm || filterType !== 'all' 
                   ? 'Try adjusting your search or filters'
                   : 'Create your first clinical note to get started'}
@@ -133,29 +133,29 @@ export default function PastNotesPage({ user, onNavigate, onLogout, onNoteSelect
             </CardContent>
           </Card>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-2 sm:space-y-3">
             {filteredNotes.map((note) => (
               <Card 
                 key={note.id}
                 className="cursor-pointer hover:border-primary transition-colors"
                 onClick={() => onNoteSelect(note)}
               >
-                <CardContent className="p-6">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-3 mb-2">
-                        <h3 className="font-semibold text-lg truncate">
+                <CardContent className="p-3 sm:p-6">
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
+                    <div className="flex-1 min-w-0 w-full">
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 mb-2">
+                        <h3 className="font-semibold text-base sm:text-lg truncate">
                           {note.patientName}
                         </h3>
-                        <span className="px-3 py-1 text-xs rounded-full bg-primary-100 text-primary-700 font-medium whitespace-nowrap">
+                        <span className="px-2 sm:px-3 py-0.5 sm:py-1 text-xs rounded-full bg-primary-100 text-primary-700 font-medium w-fit">
                           {note.noteType}
                         </span>
                       </div>
                       
-                      <div className="grid sm:grid-cols-2 gap-2 text-sm text-muted-foreground">
-                        <div className="flex items-center gap-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs sm:text-sm text-muted-foreground">
+                        <div className="flex items-center gap-2 truncate">
                           <span className="font-medium">Date:</span>
-                          <span>{new Date(note.date).toLocaleDateString()} {new Date(note.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                          <span className="truncate">{new Date(note.date).toLocaleDateString()} {new Date(note.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="font-medium">Duration:</span>
@@ -168,7 +168,7 @@ export default function PastNotesPage({ user, onNavigate, onLogout, onNoteSelect
                           </div>
                         )}
                         {note.chiefComplaint && (
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 truncate">
                             <span className="font-medium">Complaint:</span>
                             <span className="truncate">{note.chiefComplaint}</span>
                           </div>
@@ -176,18 +176,18 @@ export default function PastNotesPage({ user, onNavigate, onLogout, onNoteSelect
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      <Button variant="ghost" size="sm" className="whitespace-nowrap">
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+                      <Button variant="ghost" size="sm" className="w-full sm:w-auto whitespace-nowrap text-xs sm:text-sm">
                         View Note
                       </Button>
                       <Button 
                         variant="ghost" 
                         size="sm" 
-                        className="whitespace-nowrap text-destructive hover:text-destructive hover:bg-destructive/10"
+                        className="w-full sm:w-auto whitespace-nowrap text-xs sm:text-sm text-destructive hover:text-destructive hover:bg-destructive/10"
                         onClick={(e) => handleDeleteNote(note.id, note.patientName, e)}
                         disabled={deletingNoteId === note.id}
                       >
-                        <Trash2 className="w-4 h-4 mr-2" />
+                        <Trash2 className="w-3 sm:w-4 h-3 sm:h-4 mr-2" />
                         {deletingNoteId === note.id ? 'Deleting...' : 'Delete'}
                       </Button>
                     </div>

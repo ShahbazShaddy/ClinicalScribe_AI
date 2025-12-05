@@ -15,9 +15,9 @@ export default function DashboardLayout({ user, currentPage, onNavigate, onLogou
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const menuItems = [
-    { id: 'patients', label: 'Patients', icon: Users },
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'recording', label: 'New Recording', icon: Mic },
+    { id: 'patients', label: 'Patients', icon: Users },
     { id: 'past-notes', label: 'Past Notes', icon: FileText },
     { id: 'chat', label: 'AI Assistant', icon: MessageCircle },
     { id: 'settings', label: 'Settings', icon: Settings },

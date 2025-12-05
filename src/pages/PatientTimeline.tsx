@@ -2,6 +2,9 @@ import React, { useMemo, useState } from 'react';
 import type { User, Patient, Page } from '@/App';
 import { Button } from '@/components/ui/button';
 import DashboardLayout from '@/components/layout/DashboardLayout';
+import RiskScoreCircle from '@/components/RiskScoreCircle';
+import RiskDetailModal from '@/components/RiskDetailModal';
+import { patientRiskDataMap } from '@/lib/samplePatientRiskData';
 
 interface PatientTimelineProps {
   user: User;
@@ -10,9 +13,13 @@ interface PatientTimelineProps {
   onLogout: () => void;
 }
 
-function VisitRow({ visit, index }: { visit: any; index: number }) {
+function VisitRow({ visit, index, patientRisk }: { visit: any; index: number; patientRisk?: any }) {
   const [open, setOpen] = useState(false);
   const color = visit.type === 'routine' ? 'bg-green-100 text-green-800' : visit.type === 'urgent' ? 'bg-yellow-100 text-yellow-800' : 'bg-sky-100 text-sky-800';
+
+  // Determine if this visit is within high-risk period
+  const visitDate = new Date(visit.date);
+  const isHighRiskPeriod = patientRisk?.currentRisk?.riskLevel === 'High' && visitDate > new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
 
   return (
     <div className="flex gap-2 sm:gap-4">
@@ -25,6 +32,11 @@ function VisitRow({ visit, index }: { visit: any; index: number }) {
           <div className="min-w-0 flex-1">
             <div className="text-xs sm:text-sm font-medium">{visit.date}</div>
             <div className="text-xs text-muted-foreground line-clamp-2">{visit.complaint}</div>
+            {isHighRiskPeriod && (
+              <div className="mt-1 inline-block px-2 py-1 bg-red-100 text-red-700 rounded text-xs font-medium">
+                High Risk Period
+              </div>
+            )}
           </div>
           <div className="text-xs sm:text-xs text-muted-foreground sm:text-right flex-shrink-0">
             <div>BP: {visit.vitals.bp}</div>
@@ -48,6 +60,8 @@ function VisitRow({ visit, index }: { visit: any; index: number }) {
 }
 
 export default function PatientTimeline({ user, patient, onNavigate, onLogout }: PatientTimelineProps) {
+  const [riskModalOpen, setRiskModalOpen] = useState(false);
+  
   React.useEffect(() => {
     console.log('PatientTimeline received patient:', patient);
   }, [patient]);
@@ -62,6 +76,10 @@ export default function PatientTimeline({ user, patient, onNavigate, onLogout }:
       </DashboardLayout>
     );
   }
+
+  // Get patient risk data - use lowercase patient ID for lookup
+  const patientId = patient.name?.toLowerCase().replace(/\s+/g, '-') || '';
+  const patientRisk = patientRiskDataMap[patientId];
 
   const visits = useMemo(() => {
     const v = patient.visits ?? [];
@@ -110,6 +128,42 @@ export default function PatientTimeline({ user, patient, onNavigate, onLogout }:
             </div>
           </div>
 
+          {/* Risk Score Section */}
+          {patientRisk && (
+            <div className="mt-6 p-4 bg-gradient-to-br from-slate-50 to-slate-100 rounded-lg border border-slate-200">
+              <h3 className="text-xs font-semibold text-slate-700 mb-3">Risk Assessment</h3>
+              <div className="flex flex-col items-center sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div className="flex-shrink-0">
+                  <button
+                    onClick={() => setRiskModalOpen(true)}
+                    className="focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 rounded-full"
+                  >
+                    <RiskScoreCircle
+                      score={patientRisk.currentRisk.overallScore}
+                      riskLevel={patientRisk.currentRisk.riskLevel}
+                      riskType={patientRisk.currentRisk.primaryRiskType}
+                      size="md"
+                      interactive={true}
+                    />
+                  </button>
+                </div>
+                <div className="flex-1 text-center sm:text-left">
+                  <p className="text-sm text-slate-600 mb-2">
+                    {patientRisk.currentRisk.riskLevel === 'Low' && 'Patient has a low risk of adverse outcomes. Continue routine monitoring.'}
+                    {patientRisk.currentRisk.riskLevel === 'Moderate' && 'Increased monitoring and preventive interventions recommended.'}
+                    {patientRisk.currentRisk.riskLevel === 'High' && 'High-risk patient requiring intensive monitoring and early intervention.'}
+                  </p>
+                  <button
+                    onClick={() => setRiskModalOpen(true)}
+                    className="text-xs font-medium text-blue-600 hover:text-blue-700 underline"
+                  >
+                    View detailed factors →
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
               <div className="text-xs text-muted-foreground font-medium">Primary diagnoses</div>
@@ -137,7 +191,7 @@ export default function PatientTimeline({ user, patient, onNavigate, onLogout }:
           <h3 className="text-base sm:text-lg font-semibold text-primary mb-4">Visits</h3>
           <div className="space-y-6">
             {visits.map((v, i) => (
-              <VisitRow key={i} visit={v} index={i} />
+              <VisitRow key={i} visit={v} index={i} patientRisk={patientRisk} />
             ))}
           </div>
         </div>
@@ -175,6 +229,16 @@ export default function PatientTimeline({ user, patient, onNavigate, onLogout }:
         </div>
       </aside>
       </div>
+
+      {/* Risk Detail Modal */}
+      {patientRisk && (
+        <RiskDetailModal
+          open={riskModalOpen}
+          onOpenChange={setRiskModalOpen}
+          riskScore={patientRisk.currentRisk}
+          patientName={patient.name}
+        />
+      )}
     </DashboardLayout>
   );
 }
