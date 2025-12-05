@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { FileText, Download, Copy, RefreshCw, Edit2, Save, Trash2 } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
+import StructuredDataPanel from '@/components/StructuredDataPanel';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,6 +9,7 @@ import { toast } from 'sonner';
 import { useDatabase } from '@/hooks/useDatabase';
 import { useAI } from '@/hooks/useAI';
 import type { User, Page, Note } from '@/App';
+import type { StructuredData } from '@/types/structuredData';
 
 interface NotePageProps {
   user: User;
@@ -20,6 +22,7 @@ interface NotePageProps {
 export default function NotePage({ user, note, onNavigate, onLogout, onNoteDeleted }: NotePageProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedNote, setEditedNote] = useState(note.content);
+  const [structuredData, setStructuredData] = useState<StructuredData | undefined>(note.structuredData);
   const [isSaving, setIsSaving] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -30,7 +33,8 @@ export default function NotePage({ user, note, onNavigate, onLogout, onNoteDelet
   console.log('📄 NotePage loaded with note:', {
     noteType: note.noteType,
     contentKeys: Object.keys(note.content),
-    contentLength: Object.keys(note.content).length
+    contentLength: Object.keys(note.content).length,
+    hasStructuredData: !!structuredData
   });
 
   const handleSave = async () => {
@@ -193,140 +197,169 @@ export default function NotePage({ user, note, onNavigate, onLogout, onNoteDelet
 
   return (
     <DashboardLayout user={user} currentPage="note" onNavigate={onNavigate} onLogout={onLogout}>
-      <div className="max-w-5xl mx-auto space-y-6 animate-fade-in">
-        {/* Header */}
-        <div className="flex items-start justify-between">
-          <div>
-            <h1 className="text-3xl font-bold mb-2">
-              {note.patientName || 'Clinical Note'}
-            </h1>
-            <div className="flex items-center gap-4 text-sm text-muted-foreground">
-              <span>{new Date(note.date).toLocaleString()}</span>
-              <span>•</span>
-              <span>Duration: {Math.floor(note.duration / 60)}:{(note.duration % 60).toString().padStart(2, '0')}</span>
-              <span>•</span>
-              <span className="px-2 py-1 rounded-full bg-primary-100 text-primary-700 font-medium">
-                {note.noteType} Note
-              </span>
-            </div>
-          </div>
+      <div className="max-w-7xl mx-auto space-y-4 sm:space-y-6 animate-fade-in">
+        {/* Main Content Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+          {/* Left Content (2 columns) */}
+          <div className="lg:col-span-2 space-y-4 sm:space-y-6">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
+              <div className="flex-1 min-w-0">
+                <h1 className="text-2xl sm:text-3xl font-bold mb-1 sm:mb-2 break-words">
+                  {note.patientName || 'Clinical Note'}
+                </h1>
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-xs sm:text-sm text-muted-foreground">
+                  <span>{new Date(note.date).toLocaleString()}</span>
+                  <span className="hidden sm:block">•</span>
+                  <span>Duration: {Math.floor(note.duration / 60)}:{(note.duration % 60).toString().padStart(2, '0')}</span>
+                  <span className="hidden sm:block">•</span>
+                  <span className="px-2 py-1 rounded-full bg-primary-100 text-primary-700 font-medium text-xs">
+                    {note.noteType} Note
+                  </span>
+                </div>
+              </div>
 
-          <div className="flex items-center gap-2">
-            {isEditing ? (
-              <Button onClick={handleSave} disabled={isSaving || isLoading}>
-                <Save className="w-4 h-4 mr-2" />
-                {isSaving || isLoading ? 'Saving...' : 'Save Changes'}
-              </Button>
-            ) : (
-              <>
-                <Button variant="outline" onClick={() => setIsEditing(true)}>
-                  <Edit2 className="w-4 h-4 mr-2" />
-                  Edit
-                </Button>
-                <Button 
-                  variant="destructive" 
-                  onClick={handleDelete} 
-                  disabled={isDeleting || isEditing}
-                >
-                  <Trash2 className="w-4 h-4 mr-2" />
-                  {isDeleting ? 'Deleting...' : 'Delete'}
-                </Button>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Patient Info */}
-        {(note.patientAge || note.chiefComplaint) && (
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-6 text-sm">
-                {note.patientAge && (
-                  <div>
-                    <span className="text-muted-foreground">Age: </span>
-                    <span className="font-medium">{note.patientAge}</span>
-                  </div>
-                )}
-                {note.chiefComplaint && (
-                  <div>
-                    <span className="text-muted-foreground">Chief Complaint: </span>
-                    <span className="font-medium">{note.chiefComplaint}</span>
-                  </div>
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+                {isEditing ? (
+                  <Button 
+                    onClick={handleSave} 
+                    disabled={isSaving || isLoading}
+                    size="sm"
+                    className="w-full sm:w-auto"
+                  >
+                    <Save className="w-4 h-4 mr-2" />
+                    {isSaving || isLoading ? 'Saving...' : 'Save Changes'}
+                  </Button>
+                ) : (
+                  <>
+                    <Button 
+                      variant="outline" 
+                      onClick={() => setIsEditing(true)}
+                      size="sm"
+                      className="w-full sm:w-auto"
+                    >
+                      <Edit2 className="w-4 h-4 mr-2" />
+                      Edit
+                    </Button>
+                    <Button 
+                      variant="destructive" 
+                      onClick={handleDelete} 
+                      disabled={isDeleting || isEditing}
+                      size="sm"
+                      className="w-full sm:w-auto"
+                    >
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      {isDeleting ? 'Deleting...' : 'Delete'}
+                    </Button>
+                  </>
                 )}
               </div>
-            </CardContent>
-          </Card>
-        )}
+            </div>
 
-        {/* Action Buttons */}
-        <div className="flex flex-wrap gap-3">
-          <Button variant="outline" onClick={handleCopy}>
-            <Copy className="w-4 h-4 mr-2" />
-            Copy to Clipboard
-          </Button>
-          <Button variant="outline" onClick={handleExport} disabled={isEditing}>
-            <Download className="w-4 h-4 mr-2" />
-            Export to PDF
-          </Button>
-          <Button variant="outline" onClick={handleRegenerate} disabled={isEditing || isRegenerating || isGenerating}>
-            <RefreshCw className={`w-4 h-4 mr-2 ${isRegenerating || isGenerating ? 'animate-spin' : ''}`} />
-            {isRegenerating || isGenerating ? 'Regenerating...' : 'Regenerate'}
-          </Button>
-        </div>
+            {/* Patient Info */}
+            {(note.patientAge || note.chiefComplaint) && (
+              <Card>
+                <CardContent className="p-3 sm:p-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6 text-xs sm:text-sm">
+                    {note.patientAge && (
+                      <div>
+                        <span className="text-muted-foreground">Age: </span>
+                        <span className="font-medium">{note.patientAge}</span>
+                      </div>
+                    )}
+                    {note.chiefComplaint && (
+                      <div>
+                        <span className="text-muted-foreground">Chief Complaint: </span>
+                        <span className="font-medium">{note.chiefComplaint}</span>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
-        {/* Note Content - Render all sections dynamically based on content */}
-        <div className="space-y-6">
-          {(() => {
-            const contentKeys = Object.keys(editedNote);
-            console.log('🎨 Rendering dynamic sections:', {
-              sectionCount: contentKeys.length,
-              sections: contentKeys
-            });
-            
-            // Convert snake_case keys to readable labels (e.g., "patient_history" -> "Patient History")
-            return contentKeys.map((key) => {
-              const label = key
-                .split('_')
-                .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-                .join(' ');
-              
-              return (
-                <NoteSection
-                  key={key}
-                  title={label}
-                  content={editedNote[key] || ''}
-                  isEditing={isEditing}
-                  onChange={(value) => setEditedNote({ ...editedNote, [key]: value })}
-                />
-              );
-            });
-          })()}
-        </div>
-
-        {/* Disclaimer */}
-        <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
-          <p className="text-sm text-amber-900 text-center">
-            <strong>⚠️ Important:</strong> AI-generated content must be reviewed and verified by a licensed healthcare provider before clinical use.
-          </p>
-        </div>
-
-        {/* Feedback */}
-        <Card className="border-primary-200 bg-primary-50">
-          <CardContent className="p-6">
-            <h3 className="font-semibold mb-2">Was this note accurate?</h3>
-            <p className="text-sm text-muted-foreground mb-4">
-              Your feedback helps improve our AI
-            </p>
-            <div className="flex gap-3">
-              <Button variant="outline" size="sm" onClick={() => toast.success('Thank you for your feedback!')}>
-                👍 Yes, accurate
+            {/* Action Buttons */}
+            <div className="flex flex-col sm:flex-row flex-wrap gap-2 sm:gap-3">
+              <Button variant="outline" onClick={handleCopy} size="sm" className="w-full sm:w-auto">
+                <Copy className="w-4 h-4 mr-2" />
+                Copy to Clipboard
               </Button>
-              <Button variant="outline" size="sm" onClick={() => toast.success('Thank you for your feedback!')}>
-                👎 Needs improvement
+              <Button variant="outline" onClick={handleExport} disabled={isEditing} size="sm" className="w-full sm:w-auto">
+                <Download className="w-4 h-4 mr-2" />
+                Export to PDF
+              </Button>
+              <Button variant="outline" onClick={handleRegenerate} disabled={isEditing || isRegenerating || isGenerating} size="sm" className="w-full sm:w-auto">
+                <RefreshCw className={`w-4 h-4 mr-2 ${isRegenerating || isGenerating ? 'animate-spin' : ''}`} />
+                {isRegenerating || isGenerating ? 'Regenerating...' : 'Regenerate'}
               </Button>
             </div>
-          </CardContent>
-        </Card>
+
+            {/* Note Content - Render all sections dynamically based on content */}
+            <div className="space-y-4 sm:space-y-6">
+              {(() => {
+                const contentKeys = Object.keys(editedNote);
+                console.log('🎨 Rendering dynamic sections:', {
+                  sectionCount: contentKeys.length,
+                  sections: contentKeys
+                });
+                
+                // Convert snake_case keys to readable labels (e.g., "patient_history" -> "Patient History")
+                return contentKeys.map((key) => {
+                  const label = key
+                    .split('_')
+                    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                    .join(' ');
+                  
+                  return (
+                    <NoteSection
+                      key={key}
+                      title={label}
+                      content={editedNote[key] || ''}
+                      isEditing={isEditing}
+                      onChange={(value) => setEditedNote({ ...editedNote, [key]: value })}
+                    />
+                  );
+                });
+              })()}
+            </div>
+
+            {/* Disclaimer */}
+            <div className="p-3 sm:p-4 bg-amber-50 border border-amber-200 rounded-lg">
+              <p className="text-xs sm:text-sm text-amber-900 text-center">
+                <strong>⚠️ Important:</strong> AI-generated content must be reviewed and verified by a licensed healthcare provider before clinical use.
+              </p>
+            </div>
+
+            {/* Feedback */}
+            <Card className="border-primary-200 bg-primary-50">
+              <CardContent className="p-6">
+                <h3 className="font-semibold mb-2">Was this note accurate?</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Your feedback helps improve our AI
+                </p>
+                <div className="flex gap-3">
+                  <Button variant="outline" size="sm" onClick={() => toast.success('Thank you for your feedback!')}>
+                    👍 Yes, accurate
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => toast.success('Thank you for your feedback!')}>
+                    👎 Needs improvement
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Right Sidebar - Structured Data Panel */}
+          <div className="lg:col-span-1">
+            <StructuredDataPanel 
+              data={structuredData} 
+              onUpdate={(data) => {
+                setStructuredData(data);
+                toast.success('Structured data updated');
+              }}
+            />
+          </div>
+        </div>
       </div>
     </DashboardLayout>
   );

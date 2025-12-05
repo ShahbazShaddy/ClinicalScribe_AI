@@ -345,3 +345,82 @@ Rules:
     return errorResult;
   }
 }
+
+/**
+ * Extract structured clinical data from note content
+ * @param noteContent - The note content object with all sections
+ * @returns Extracted structured data including vitals, clinical info, symptoms
+ */
+export async function extractStructuredData(
+  noteContent: Record<string, string>
+): Promise<any> {
+  const contentText = Object.entries(noteContent)
+    .map(([key, value]) => `${key}: ${value}`)
+    .join('\n\n');
+
+  const systemPrompt = `You are a clinical data extraction specialist. Analyze clinical notes and extract structured data.
+
+Extract the following information from the clinical notes and return a JSON object:
+
+{
+  "vitals": {
+    "bloodPressure": {"systolic": number, "diastolic": number, "status": "normal|elevated|high|critical"},
+    "heartRate": {"value": number, "status": "normal|low|high"},
+    "temperature": {"value": number, "unit": "C|F", "status": "normal|low|fever|high-fever"},
+    "weight": {"value": number, "unit": "lbs|kg", "previousValue": number or null, "change": number or null, "status": "stable|gained|lost"},
+    "o2Saturation": {"value": number, "status": "normal|low|critical"},
+    "respiratoryRate": {"value": number, "status": "normal|low|high"}
+  },
+  "clinicalInfo": {
+    "chiefComplaint": "string",
+    "diagnoses": ["array", "of", "diagnoses"],
+    "medicationsMentioned": [
+      {"name": "medication name", "dosage": "dosage", "frequency": "frequency", "route": "route"}
+    ],
+    "labValues": [
+      {"testName": "test name", "value": "value", "unit": "unit", "referenceRange": "range", "status": "normal|high|low|critical"}
+    ],
+    "allergies": ["array", "of", "allergies"]
+  },
+  "symptoms": [
+    {"name": "symptom", "severity": "mild|moderate|severe", "duration": "duration"}
+  ]
+}
+
+Rules:
+- Extract ONLY values explicitly mentioned in the notes
+- For any missing information, use null
+- BP status: normal <120/80, elevated 120-129/<80, high ≥130/80, critical ≥180/120
+- HR status: normal 60-100, low <60, high >100
+- Temperature status: normal 98.6°F (37°C), fever 100.4-103.9°F, high-fever ≥104°F
+- O2 status: normal ≥95%, low 90-94%, critical <90%
+- RR status: normal 12-20, low <12, high >20
+- For weight: if previous value mentioned, calculate change and status
+- Only include diagnoses, medications, and lab values that are actually mentioned
+- Return ONLY valid JSON, no markdown`;
+
+  const messages: Message[] = [
+    {
+      role: 'user',
+      content: `Extract structured clinical data from these notes:\n\n${contentText}`,
+    },
+  ];
+
+  try {
+    const response = await generateText(messages, systemPrompt, 0.1, 2048);
+    console.log('📊 Structured Data Response:', response.substring(0, 300) + '...');
+
+    const jsonMatch = response.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      console.log('✅ Successfully extracted structured data');
+      return parsed;
+    }
+
+    console.warn('⚠️ Could not extract structured data JSON');
+    return { vitals: {}, clinicalInfo: {}, symptoms: [] };
+  } catch (error) {
+    console.error('❌ Error extracting structured data:', error);
+    return { vitals: {}, clinicalInfo: {}, symptoms: [] };
+  }
+}
