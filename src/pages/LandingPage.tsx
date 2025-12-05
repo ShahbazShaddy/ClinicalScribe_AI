@@ -1,8 +1,8 @@
-import { Shield, Lock, Clock, FileText, Stethoscope, CheckCircle } from 'lucide-react';
+import { Shield, Lock, Clock, FileText, Stethoscope, CheckCircle, Phone, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface LandingPageProps {
-  onNavigate: () => void;
+  onNavigate: (page?: string) => void;
 }
 
 export default function LandingPage({ onNavigate }: LandingPageProps) {
@@ -15,7 +15,7 @@ export default function LandingPage({ onNavigate }: LandingPageProps) {
             <Stethoscope className="w-8 h-8 text-primary" />
             <span className="text-2xl font-bold text-primary">ClinicalScribe AI</span>
           </div>
-          <Button onClick={onNavigate} variant="outline">
+          <Button onClick={() => onNavigate('auth')} variant="outline">
             Login
           </Button>
         </div>
@@ -49,7 +49,7 @@ export default function LandingPage({ onNavigate }: LandingPageProps) {
             </p>
 
             <Button 
-              onClick={onNavigate}
+              onClick={() => onNavigate('auth')}
               size="lg"
               className="text-lg px-8 py-6 h-auto medical-gradient hover:opacity-90 transition-opacity"
             >
@@ -178,6 +178,159 @@ export default function LandingPage({ onNavigate }: LandingPageProps) {
         </div>
       </section>
 
+      {/* Subscription Tiers */}
+      <section className="py-20 bg-background">
+        <div className="container mx-auto px-4">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
+              Simple, Transparent Pricing
+            </h2>
+            <p className="text-lg text-muted-foreground">
+              Choose the plan that works for your practice
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+            {/* Starter Plan */}
+            <div className="p-8 rounded-lg border border-border bg-card hover:border-primary transition-colors flex flex-col">
+              <h3 className="text-2xl font-bold mb-2">Starter</h3>
+              <p className="text-muted-foreground mb-6">Perfect for individual practitioners</p>
+              <div className="mb-6">
+                <span className="text-4xl font-bold text-primary">$29</span>
+                <span className="text-muted-foreground">/month</span>
+              </div>
+              <Button className="mb-8 medical-gradient" onClick={() => onNavigate('auth')}>
+                Get Started
+              </Button>
+              <ul className="space-y-3 flex-1">
+                <li className="flex items-center gap-2">
+                  <CheckCircle className="w-5 h-5 text-success flex-shrink-0" />
+                  <span className="text-foreground">Up to 50 notes/month</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircle className="w-5 h-5 text-success flex-shrink-0" />
+                  <span className="text-foreground">Basic templates</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircle className="w-5 h-5 text-success flex-shrink-0" />
+                  <span className="text-foreground">Standard support</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircle className="w-5 h-5 text-success flex-shrink-0" />
+                  <span className="text-foreground">Cloud storage</span>
+                </li>
+              </ul>
+            </div>
+
+            {/* Professional Plan */}
+            <div className="p-8 rounded-lg border-2 border-primary bg-card shadow-lg flex flex-col relative">
+              <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 bg-primary text-primary-foreground px-4 py-1 rounded-full text-sm font-semibold">
+                Most Popular
+              </div>
+              <h3 className="text-2xl font-bold mb-2">Professional</h3>
+              <p className="text-muted-foreground mb-6">For busy clinics and group practices</p>
+              <div className="mb-6">
+                <span className="text-4xl font-bold text-primary">$79</span>
+                <span className="text-muted-foreground">/month</span>
+              </div>
+              <Button className="mb-8 medical-gradient" onClick={() => onNavigate('auth')}>
+                Get Started
+              </Button>
+              <ul className="space-y-3 flex-1">
+                <li className="flex items-center gap-2">
+                  <CheckCircle className="w-5 h-5 text-success flex-shrink-0" />
+                  <span className="text-foreground">Unlimited notes</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircle className="w-5 h-5 text-success flex-shrink-0" />
+                  <span className="text-foreground">All templates + custom</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircle className="w-5 h-5 text-success flex-shrink-0" />
+                  <span className="text-foreground">Priority support</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircle className="w-5 h-5 text-success flex-shrink-0" />
+                  <span className="text-foreground">Team collaboration (up to 5)</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircle className="w-5 h-5 text-success flex-shrink-0" />
+                  <span className="text-foreground">API access</span>
+                </li>
+              </ul>
+            </div>
+
+            {/* Enterprise Plan */}
+            <div className="p-8 rounded-lg border border-border bg-card hover:border-primary transition-colors flex flex-col">
+              <h3 className="text-2xl font-bold mb-2">Enterprise</h3>
+              <p className="text-muted-foreground mb-6">For large healthcare organizations</p>
+              <div className="mb-6">
+                <span className="text-4xl font-bold text-primary">Custom</span>
+              </div>
+              <Button variant="outline" className="mb-8">
+                Contact Sales
+              </Button>
+              <ul className="space-y-3 flex-1">
+                <li className="flex items-center gap-2">
+                  <CheckCircle className="w-5 h-5 text-success flex-shrink-0" />
+                  <span className="text-foreground">Everything in Professional</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircle className="w-5 h-5 text-success flex-shrink-0" />
+                  <span className="text-foreground">Unlimited users</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircle className="w-5 h-5 text-success flex-shrink-0" />
+                  <span className="text-foreground">Dedicated support & training</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircle className="w-5 h-5 text-success flex-shrink-0" />
+                  <span className="text-foreground">Custom integrations</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircle className="w-5 h-5 text-success flex-shrink-0" />
+                  <span className="text-foreground">SLA guarantee</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Contact Info */}
+      <section className="py-20 bg-primary text-primary-foreground">
+        <div className="container mx-auto px-4">
+          <div className="max-w-2xl mx-auto">
+            <h2 className="text-3xl md:text-4xl font-bold text-center mb-12">
+              Get In Touch
+            </h2>
+            <div className="grid md:grid-cols-2 gap-8">
+              <div className="flex items-center justify-center md:justify-start gap-4 bg-primary-700 rounded-lg p-6">
+                <Phone className="w-8 h-8 flex-shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-sm opacity-90">Call Us</p>
+                  <a href="tel:+923047201214" className="text-lg font-semibold hover:underline break-all">
+                    +92 304 7201214
+                  </a>
+                </div>
+              </div>
+              <div className="flex items-center justify-center md:justify-start gap-4 bg-primary-700 rounded-lg p-6">
+                <Mail className="w-8 h-8 flex-shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-sm opacity-90">Email Us</p>
+                  <a href="mailto:2022cs174@student.uet.edu.pk" className="text-sm font-semibold hover:underline break-all">
+                    2022cs174@student.uet.edu.pk
+                  </a>
+                </div>
+              </div>
+            </div>
+            <p className="text-center mt-8 opacity-90">
+              Our team is here to answer any questions and help you get started.
+            </p>
+          </div>
+        </div>
+      </section>
+
       {/* CTA Section */}
       <section className="py-20 bg-primary text-primary-foreground">
         <div className="container mx-auto px-4 text-center">
@@ -188,7 +341,7 @@ export default function LandingPage({ onNavigate }: LandingPageProps) {
             Join thousands of healthcare providers saving hours every day
           </p>
           <Button 
-            onClick={onNavigate}
+            onClick={() => onNavigate('auth')}
             size="lg"
             variant="secondary"
             className="text-lg px-8 py-6 h-auto"
@@ -201,12 +354,21 @@ export default function LandingPage({ onNavigate }: LandingPageProps) {
       {/* Footer */}
       <footer className="border-t border-border bg-card py-8">
         <div className="container mx-auto px-4 text-center text-sm text-muted-foreground">
-          <p className="mb-2">
-            <strong className="text-foreground">DEMO MODE:</strong> This is a demonstration application. 
-            No actual patient data should be entered.
-          </p>
           <p>
-            © 2025 ClinicalScribe AI. All rights reserved. • Privacy Policy • Terms of Service
+            © 2025 ClinicalScribe AI. All rights reserved. • 
+            <button 
+              onClick={() => onNavigate('privacy')}
+              className="text-primary hover:underline cursor-pointer"
+            >
+              {' '}Privacy Policy{' '}
+            </button>
+            • 
+            <button 
+              onClick={() => onNavigate('terms')}
+              className="text-primary hover:underline cursor-pointer"
+            >
+              {' '}Terms of Service
+            </button>
           </p>
         </div>
       </footer>

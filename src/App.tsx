@@ -8,8 +8,10 @@ import NotePage from '@/pages/NotePage';
 import PastNotesPage from '@/pages/PastNotesPage';
 import SettingsPage from '@/pages/SettingsPage';
 import ChatPage from '@/pages/ChatPage';
+import PrivacyPolicy from '@/pages/PrivacyPolicy';
+import TermsOfService from '@/pages/TermsOfService';
 
-export type Page = 'landing' | 'auth' | 'dashboard' | 'recording' | 'note' | 'past-notes' | 'settings' | 'chat';
+export type Page = 'landing' | 'auth' | 'dashboard' | 'recording' | 'note' | 'past-notes' | 'settings' | 'chat' | 'privacy' | 'terms';
 
 export interface User {
   id?: string;
@@ -74,7 +76,7 @@ function App() {
   return (
     <>
       {currentPage === 'landing' && (
-        <LandingPage onNavigate={() => navigateTo('auth')} />
+        <LandingPage onNavigate={(page) => navigateTo(page as Page || 'auth')} />
       )}
       {currentPage === 'auth' && (
         <AuthPage onLogin={handleLogin} onBack={() => navigateTo('landing')} />
@@ -123,6 +125,12 @@ function App() {
       )}
       {currentPage === 'chat' && user && (
         <ChatPage user={user} onNavigate={navigateTo} onLogout={handleLogout} />
+      )}
+      {currentPage === 'privacy' && (
+        <PrivacyPolicy onNavigate={() => navigateTo('landing')} />
+      )}
+      {currentPage === 'terms' && (
+        <TermsOfService onNavigate={() => navigateTo('landing')} />
       )}
       <Toaster />
     </>
