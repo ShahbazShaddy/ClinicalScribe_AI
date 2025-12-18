@@ -1,5 +1,5 @@
 import supabase, { isSupabaseConfigured } from './client';
-import type { User, NewUser, Note, NewNote, UserSettings, NewUserSettings, ChatMessage, NewChatMessage, ChatSession, NewChatSession, Patient, NewPatient, Visit, NewVisit } from './schema';
+import type { User, NewUser, Note, NewNote, UserSettings, NewUserSettings, ChatMessage, NewChatMessage, ChatSession, NewChatSession, Patient, NewPatient, Visit, NewVisit, PatientChatSession, NewPatientChatSession, PatientChatMessage, NewPatientChatMessage, PatientRiskHistory, NewPatientRiskHistory } from './schema';
 
 // ============================================
 // User Operations
@@ -863,6 +863,56 @@ export async function getVisitsByPatientId(patientId: string): Promise<Visit[]> 
   return data || [];
 }
 
+// Get visits with full note content for chatbot context
+export async function getVisitsWithNotesByPatientId(patientId: string): Promise<any[]> {
+  if (!isSupabaseConfigured()) {
+    return [];
+  }
+
+  // First get all visits for the patient
+  const { data: visits, error: visitsError } = await supabase
+    .from('visits')
+    .select('*')
+    .eq('patient_id', patientId)
+    .order('visit_date', { ascending: false });
+
+  if (visitsError) {
+    console.error('Error fetching visits:', visitsError);
+    throw visitsError;
+  }
+
+  if (!visits || visits.length === 0) {
+    return [];
+  }
+
+  // Get all note IDs from visits that have them
+  const noteIds = visits
+    .filter(v => v.note_id)
+    .map(v => v.note_id);
+
+  // Fetch all notes in one query
+  let notesMap: Record<string, any> = {};
+  if (noteIds.length > 0) {
+    const { data: notes, error: notesError } = await supabase
+      .from('notes')
+      .select('id, content, transcription, note_type, chief_complaint')
+      .in('id', noteIds);
+
+    if (!notesError && notes) {
+      notesMap = notes.reduce((acc, note) => {
+        acc[note.id] = note;
+        return acc;
+      }, {} as Record<string, any>);
+    }
+  }
+
+  // Combine visits with their notes
+  return visits.map(visit => ({
+    ...visit,
+    note: visit.note_id ? notesMap[visit.note_id] || null : null,
+  }));
+}
+
 export async function getVisitsByUserId(userId: string): Promise<Visit[]> {
   if (!isSupabaseConfigured()) {
     return [];
@@ -1038,4 +1088,431 @@ export function dbVisitToAppVisit(dbVisit: any): {
     duration: dbVisit.duration || 0,
     status: dbVisit.status || 'completed',
   };
+}
+
+// ============================================
+// Patient Chat Session Operations
+// ============================================
+
+export async function createPatientChatSession(
+  patientId: string,
+  userId: string,
+  title?: string
+): Promise<PatientChatSession | null> {
+  if (!isSupabaseConfigured()) {
+    console.warn('Supabase not configured');
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from('patient_chat_sessions')
+    .insert({
+      patient_id: patientId,
+      user_id: userId,
+      title: title || 'Patient Chat',
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error creating patient chat session:', error);
+    throw error;
+  }
+
+  return data;
+}
+
+export async function getPatientChatSessionsByPatientId(patientId: string): Promise<PatientChatSession[]> {
+  if (!isSupabaseConfigured()) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from('patient_chat_sessions')
+    .select('*')
+    .eq('patient_id', patientId)
+    .order('updated_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching patient chat sessions:', error);
+    throw error;
+  }
+
+  return data || [];
+}
+
+export async function getPatientChatSessionById(sessionId: string): Promise<PatientChatSession | null> {
+  if (!isSupabaseConfigured()) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from('patient_chat_sessions')
+    .select('*')
+    .eq('id', sessionId)
+    .single();
+
+  if (error && error.code !== 'PGRST116') {
+    console.error('Error fetching patient chat session:', error);
+    throw error;
+  }
+
+  return data;
+}
+
+export async function updatePatientChatSessionTitle(sessionId: string, title: string): Promise<PatientChatSession | null> {
+  if (!isSupabaseConfigured()) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from('patient_chat_sessions')
+    .update({
+      title,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', sessionId)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error updating patient chat session title:', error);
+    throw error;
+  }
+
+  return data;
+}
+
+export async function deletePatientChatSession(sessionId: string): Promise<boolean> {
+  if (!isSupabaseConfigured()) {
+    console.warn('Supabase not configured');
+    return false;
+  }
+
+  try {
+    const { error } = await supabase
+      .from('patient_chat_sessions')
+      .delete()
+      .eq('id', sessionId);
+
+    if (error) {
+      console.error('Error deleting patient chat session:', error);
+      throw error;
+    }
+
+    return true;
+  } catch (err) {
+    console.error('Error deleting patient chat session:', err);
+    throw err;
+  }
+}
+
+// ============================================
+// Patient Chat Message Operations
+// ============================================
+
+export async function createPatientChatMessage(
+  sessionId: string,
+  patientId: string,
+  userId: string,
+  role: 'user' | 'assistant',
+  content: string
+): Promise<PatientChatMessage | null> {
+  if (!isSupabaseConfigured()) {
+    console.warn('Supabase not configured');
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from('patient_chat_messages')
+    .insert({
+      session_id: sessionId,
+      patient_id: patientId,
+      user_id: userId,
+      role,
+      content,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error creating patient chat message:', error);
+    throw error;
+  }
+
+  return data;
+}
+
+export async function getPatientChatMessagesBySessionId(sessionId: string): Promise<PatientChatMessage[]> {
+  if (!isSupabaseConfigured()) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from('patient_chat_messages')
+    .select('*')
+    .eq('session_id', sessionId)
+    .order('created_at', { ascending: true });
+
+  if (error) {
+    console.error('Error fetching patient chat messages:', error);
+    throw error;
+  }
+
+  return data || [];
+}
+
+export async function deletePatientChatMessagesBySessionId(sessionId: string): Promise<boolean> {
+  if (!isSupabaseConfigured()) {
+    console.warn('Supabase not configured');
+    return false;
+  }
+
+  try {
+    const { error } = await supabase
+      .from('patient_chat_messages')
+      .delete()
+      .eq('session_id', sessionId);
+
+    if (error) {
+      console.error('Error deleting patient chat messages:', error);
+      throw error;
+    }
+
+    return true;
+  } catch (err) {
+    console.error('Error deleting patient chat messages:', err);
+    throw err;
+  }
+}
+
+// ============================================
+// Risk Assessment Operations
+// ============================================
+
+export interface RiskAssessment {
+  riskLevel: 'low' | 'moderate' | 'high' | 'critical';
+  riskScore: number;
+  riskFactors: string[];
+  summary?: string;
+  concerns?: string[];
+  recommendations?: string[];
+  followUpUrgency?: string;
+}
+
+export async function updatePatientRiskLevel(
+  patientId: string,
+  riskLevel: string,
+  riskScore: number,
+  riskFactors: string[],
+  riskNotes?: string
+): Promise<Patient | null> {
+  if (!isSupabaseConfigured()) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from('patients')
+    .update({
+      risk_level: riskLevel,
+      risk_score: riskScore,
+      risk_factors: riskFactors,
+      risk_notes: riskNotes,
+      risk_assessed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', patientId)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error updating patient risk level:', error);
+    throw error;
+  }
+
+  return data;
+}
+
+export async function updateVisitRiskAssessment(
+  visitId: string,
+  assessment: RiskAssessment
+): Promise<Visit | null> {
+  if (!isSupabaseConfigured()) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from('visits')
+    .update({
+      risk_level: assessment.riskLevel,
+      risk_score: assessment.riskScore,
+      risk_factors: assessment.riskFactors,
+      ai_risk_assessment: {
+        summary: assessment.summary || '',
+        concerns: assessment.concerns || [],
+        recommendations: assessment.recommendations || [],
+        followUpUrgency: assessment.followUpUrgency || 'routine',
+      },
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', visitId)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error updating visit risk assessment:', error);
+    throw error;
+  }
+
+  return data;
+}
+
+export async function createPatientRiskHistoryEntry(
+  patientId: string,
+  visitId: string | null,
+  riskLevel: string,
+  riskScore: number,
+  riskFactors: string[],
+  assessedBy: 'ai' | 'manual' = 'ai',
+  notes?: string
+): Promise<PatientRiskHistory | null> {
+  if (!isSupabaseConfigured()) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from('patient_risk_history')
+    .insert({
+      patient_id: patientId,
+      visit_id: visitId,
+      risk_level: riskLevel,
+      risk_score: riskScore,
+      risk_factors: riskFactors,
+      assessed_by: assessedBy,
+      notes: notes,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error creating risk history entry:', error);
+    throw error;
+  }
+
+  return data;
+}
+
+export async function getPatientRiskHistory(patientId: string): Promise<PatientRiskHistory[]> {
+  if (!isSupabaseConfigured()) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from('patient_risk_history')
+    .select('*')
+    .eq('patient_id', patientId)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching patient risk history:', error);
+    throw error;
+  }
+
+  return data || [];
+}
+
+export async function getHighRiskPatients(userId: string): Promise<Patient[]> {
+  if (!isSupabaseConfigured()) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from('patients')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('is_active', true)
+    .in('risk_level', ['high', 'critical'])
+    .order('risk_score', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching high risk patients:', error);
+    throw error;
+  }
+
+  return data || [];
+}
+
+export async function getPatientStatistics(patientId: string): Promise<{
+  totalVisits: number;
+  lastVisit: string | null;
+  avgVisitDuration: number;
+  vitalsHistory: any[];
+  riskHistory: any[];
+}> {
+  if (!isSupabaseConfigured()) {
+    return { totalVisits: 0, lastVisit: null, avgVisitDuration: 0, vitalsHistory: [], riskHistory: [] };
+  }
+
+  // Get all visits
+  const { data: visits, error: visitsError } = await supabase
+    .from('visits')
+    .select('*')
+    .eq('patient_id', patientId)
+    .order('visit_date', { ascending: false });
+
+  if (visitsError) {
+    console.error('Error fetching visits for statistics:', visitsError);
+    throw visitsError;
+  }
+
+  // Get risk history
+  const { data: riskHistory, error: riskError } = await supabase
+    .from('patient_risk_history')
+    .select('*')
+    .eq('patient_id', patientId)
+    .order('created_at', { ascending: true });
+
+  if (riskError) {
+    console.error('Error fetching risk history:', riskError);
+  }
+
+  const totalVisits = visits?.length || 0;
+  const lastVisit = visits?.[0]?.visit_date || null;
+  const avgVisitDuration = totalVisits > 0
+    ? Math.round((visits?.reduce((sum, v) => sum + (v.duration || 0), 0) || 0) / totalVisits)
+    : 0;
+
+  // Extract vitals history for charts
+  const vitalsHistory = (visits || []).map(v => ({
+    date: v.visit_date,
+    vitals: v.vitals,
+    visitType: v.visit_type,
+  })).reverse();
+
+  return {
+    totalVisits,
+    lastVisit,
+    avgVisitDuration,
+    vitalsHistory,
+    riskHistory: riskHistory || [],
+  };
+}
+
+export async function getPatientVisits(patientId: string): Promise<Visit[]> {
+  if (!isSupabaseConfigured()) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from('visits')
+    .select('*')
+    .eq('patient_id', patientId)
+    .order('visit_date', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching patient visits:', error);
+    throw error;
+  }
+
+  return data || [];
 }

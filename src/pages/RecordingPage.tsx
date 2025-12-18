@@ -14,7 +14,8 @@ import type { User, Page, Note, Patient } from '@/App';
 import { useAI } from '@/hooks/useAI';
 import type { Alert as AlertType } from '@/types/alerts';
 import { generateSimulatedAlerts } from '@/lib/alertDefinitions';
-import { createVisit } from '@/db/services';
+import { createVisit, updateVisitRiskAssessment, updatePatientRiskLevel, createPatientRiskHistoryEntry, getPatientVisits } from '@/db/services';
+import { analyzeVisitRisk } from '@/services/riskAssessment';
 
 interface RecordingPageProps {
   user: User;
@@ -178,7 +179,8 @@ export default function RecordingPage({ user, patient, onNavigate, onLogout, onN
         noteType: 'Flexible', // Mark as flexible/dynamic
         date: new Date().toISOString(),
         duration: duration,
-        content: noteContent
+        content: noteContent,
+        transcription: transcribedText // Save the original transcription
       };
 
       console.log('Creating note with extracted patient info:', {
@@ -203,7 +205,8 @@ export default function RecordingPage({ user, patient, onNavigate, onLogout, onN
           chiefComplaint: note.chiefComplaint,
           noteType: note.noteType,
           duration: note.duration,
-          content: note.content
+          content: note.content,
+          transcription: note.transcription // Include the original transcription
         });
         
         savedNoteId = savedNote?.id;
@@ -230,6 +233,66 @@ export default function RecordingPage({ user, patient, onNavigate, onLogout, onN
             status: 'completed',
           });
           console.log('Visit created:', visit);
+
+          // Perform AI risk assessment
+          if (visit) {
+            setProcessingStep('Analyzing patient risk...');
+            try {
+              // Get previous visits for context
+              const previousVisits = await getPatientVisits(patient.id);
+              
+              const visitData = {
+                chiefComplaint: note.chiefComplaint || '',
+                vitals: noteContent['Vitals'] || {},
+                diagnosis: noteContent['Assessment'] || noteContent['Diagnosis'] || '',
+                treatmentPlan: noteContent['Plan'] || noteContent['Treatment Plan'] || '',
+                noteContent: noteContent
+              };
+
+              const patientData = {
+                age: patient.age,
+                gender: patient.gender,
+                diagnoses: patient.diagnoses || [],
+                medications: patient.medications || [],
+                allergies: patient.allergies || []
+              };
+
+              const riskAssessment = await analyzeVisitRisk(visitData, patientData, previousVisits);
+              console.log('Risk assessment completed:', riskAssessment);
+
+              // Update visit with risk assessment
+              await updateVisitRiskAssessment(visit.id, {
+                riskLevel: riskAssessment.riskLevel as 'low' | 'medium' | 'high',
+                riskScore: riskAssessment.riskScore,
+                riskFactors: riskAssessment.riskFactors,
+                aiRiskAssessment: riskAssessment
+              });
+
+              // Update patient's overall risk level
+              await updatePatientRiskLevel(patient.id, {
+                riskLevel: riskAssessment.riskLevel as 'low' | 'medium' | 'high',
+                riskScore: riskAssessment.riskScore,
+                riskFactors: riskAssessment.riskFactors,
+                riskNotes: riskAssessment.summary
+              });
+
+              // Create risk history entry
+              await createPatientRiskHistoryEntry({
+                patientId: patient.id,
+                visitId: visit.id,
+                riskLevel: riskAssessment.riskLevel as 'low' | 'medium' | 'high',
+                riskScore: riskAssessment.riskScore,
+                riskFactors: riskAssessment.riskFactors,
+                assessedBy: 'ai',
+                notes: riskAssessment.summary
+              });
+
+              toast.success(`Risk assessment complete: ${riskAssessment.riskLevel.toUpperCase()} risk (${riskAssessment.riskScore}/100)`);
+            } catch (riskErr) {
+              console.error('Error performing risk assessment:', riskErr);
+              // Don't fail the whole process if risk assessment fails
+            }
+          }
         }
       } catch (dbErr) {
         console.error('Error saving to database:', dbErr);

@@ -3,14 +3,19 @@ import type { User, Patient, Page } from '@/App';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import DashboardLayout from '@/components/layout/DashboardLayout';
-import { Plus, Search, Mic, Eye, Loader2, UserPlus } from 'lucide-react';
+import { Plus, Search, Mic, Eye, Loader2, UserPlus, MessageSquare, BarChart3, Shield, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { createPatient, getPatientsByUserId, dbPatientToAppPatient, getVisitsByPatientId } from '@/db/services';
 import { isSupabaseConfigured } from '@/db/client';
+import { PatientChatModal } from '@/components/PatientChatModal';
+import { PatientAnalysisModal } from '@/components/PatientAnalysisModal';
+import { RiskLevelEditor } from '@/components/RiskLevelEditor';
+import { getRiskLevelColor } from '@/services/riskAssessment';
 
 interface PatientsPageProps {
   user: User;
@@ -63,9 +68,13 @@ export default function PatientsPage({ user, onNavigate, onViewPatient, onStartR
   const [query, setQuery] = useState('');
   const [patients, setPatients] = useState<Patient[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState<NewPatientForm>(initialFormState);
+  const [chatPatient, setChatPatient] = useState<Patient | null>(null);
+  const [analysisPatient, setAnalysisPatient] = useState<Patient | null>(null);
+  const [riskEditPatient, setRiskEditPatient] = useState<Patient | null>(null);
 
   // Load patients from database
   useEffect(() => {
@@ -80,6 +89,7 @@ export default function PatientsPage({ user, onNavigate, onViewPatient, onStartR
 
     try {
       setIsLoading(true);
+      setLoadError(null);
       const dbPatients = await getPatientsByUserId(user.id);
       
       // Convert and get last visit date for each patient
@@ -103,9 +113,13 @@ export default function PatientsPage({ user, onNavigate, onViewPatient, onStartR
       );
       
       setPatients(patientsWithVisits as Patient[]);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading patients:', error);
-      toast.error('Failed to load patients');
+      const errorMessage = error?.message?.includes('timeout') || error?.message?.includes('ERR_TIMED_OUT')
+        ? 'Connection timed out. Please check your network and try again.'
+        : 'Failed to load patients. Please try again.';
+      setLoadError(errorMessage);
+      toast.error(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -426,8 +440,25 @@ export default function PatientsPage({ user, onNavigate, onViewPatient, onStartR
         </div>
 
         {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <div className="flex flex-col items-center justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-primary mb-2" />
+            <p className="text-sm text-muted-foreground">Loading patients...</p>
+          </div>
+        ) : loadError ? (
+          <div className="bg-card rounded-lg shadow-sm p-12 text-center">
+            <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-destructive/10 flex items-center justify-center">
+              <svg className="h-6 w-6 text-destructive" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-medium mb-2">Connection Error</h3>
+            <p className="text-muted-foreground mb-4 max-w-md mx-auto">{loadError}</p>
+            <Button onClick={loadPatients}>
+              <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Retry
+            </Button>
           </div>
         ) : filteredPatients.length === 0 ? (
           <div className="bg-card rounded-lg shadow-sm p-12 text-center">
@@ -451,7 +482,7 @@ export default function PatientsPage({ user, onNavigate, onViewPatient, onStartR
                   <tr>
                     <th className="text-left px-3 py-3 sm:px-4">Patient Name</th>
                     <th className="hidden sm:table-cell text-left px-3 py-3 sm:px-4">Age</th>
-                    <th className="hidden md:table-cell text-left px-3 py-3 sm:px-4">Contact</th>
+                    <th className="hidden md:table-cell text-center px-3 py-3 sm:px-4">Risk</th>
                     <th className="hidden lg:table-cell text-left px-3 py-3 sm:px-4">Last Visit</th>
                     <th className="text-right px-3 py-3 sm:px-4">Actions</th>
                   </tr>
@@ -468,29 +499,61 @@ export default function PatientsPage({ user, onNavigate, onViewPatient, onStartR
                       <td className="hidden sm:table-cell px-3 py-3 sm:px-4">
                         {p.age || '—'} {p.gender ? `(${p.gender})` : ''}
                       </td>
-                      <td className="hidden md:table-cell px-3 py-3 sm:px-4">
-                        <div className="text-xs">
-                          {p.phone && <div>{p.phone}</div>}
-                          {p.email && <div className="text-muted-foreground">{p.email}</div>}
-                          {!p.phone && !p.email && <span className="text-muted-foreground">—</span>}
-                        </div>
+                      <td className="hidden md:table-cell px-3 py-3 sm:px-4 text-center">
+                        <Badge 
+                          variant={p.riskLevel === 'high' ? 'destructive' : p.riskLevel === 'medium' ? 'secondary' : 'outline'}
+                          className={`cursor-pointer ${
+                            p.riskLevel === 'high' ? 'bg-red-500 hover:bg-red-600' : 
+                            p.riskLevel === 'medium' ? 'bg-yellow-500 hover:bg-yellow-600 text-white' : 
+                            'bg-green-500 hover:bg-green-600 text-white'
+                          }`}
+                          onClick={() => setRiskEditPatient(p)}
+                        >
+                          {p.riskLevel === 'high' && <AlertTriangle className="h-3 w-3 mr-1" />}
+                          {p.riskLevel === 'medium' && <Shield className="h-3 w-3 mr-1" />}
+                          {(p.riskLevel || 'low').charAt(0).toUpperCase() + (p.riskLevel || 'low').slice(1)}
+                          {p.riskScore !== undefined && p.riskScore !== null && (
+                            <span className="ml-1 opacity-80">({p.riskScore})</span>
+                          )}
+                        </Badge>
                       </td>
                       <td className="hidden lg:table-cell px-3 py-3 sm:px-4">
                         {p.lastVisit || 'No visits yet'}
                       </td>
                       <td className="px-3 py-3 sm:px-4">
-                        <div className="flex items-center justify-end gap-2">
+                        <div className="flex items-center justify-end gap-1 sm:gap-2">
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => setAnalysisPatient(p)}
+                            title="Patient Analysis"
+                            className="hidden sm:flex"
+                          >
+                            <BarChart3 className="h-4 w-4 sm:mr-1" />
+                            <span className="hidden lg:inline">Analysis</span>
+                          </Button>
                           <Button 
                             size="sm" 
                             variant="outline"
                             onClick={() => onViewPatient(p)}
+                            title="View Patient"
                           >
                             <Eye className="h-4 w-4 sm:mr-1" />
                             <span className="hidden sm:inline">View</span>
                           </Button>
                           <Button 
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setChatPatient(p)}
+                            title="Chat with AI about patient"
+                          >
+                            <MessageSquare className="h-4 w-4 sm:mr-1" />
+                            <span className="hidden sm:inline">Chat</span>
+                          </Button>
+                          <Button 
                             size="sm" 
                             onClick={() => onStartRecording(p)}
+                            title="Start Recording"
                           >
                             <Mic className="h-4 w-4 sm:mr-1" />
                             <span className="hidden sm:inline">Record</span>
@@ -503,6 +566,49 @@ export default function PatientsPage({ user, onNavigate, onViewPatient, onStartR
               </table>
             </div>
           </div>
+        )}
+
+        {/* Patient Chat Modal */}
+        {chatPatient && (
+          <PatientChatModal
+            isOpen={!!chatPatient}
+            onClose={() => setChatPatient(null)}
+            patient={chatPatient}
+            user={user}
+          />
+        )}
+
+        {/* Patient Analysis Modal */}
+        {analysisPatient && (
+          <PatientAnalysisModal
+            isOpen={!!analysisPatient}
+            onClose={() => setAnalysisPatient(null)}
+            patient={analysisPatient}
+          />
+        )}
+
+        {/* Risk Level Editor Modal */}
+        {riskEditPatient && (
+          <RiskLevelEditor
+            isOpen={!!riskEditPatient}
+            onClose={() => setRiskEditPatient(null)}
+            patient={riskEditPatient}
+            onRiskUpdated={(updatedPatient) => {
+              // Update patient in local state
+              setPatients(patients.map(p => 
+                p.id === riskEditPatient.id 
+                  ? { 
+                      ...p, 
+                      riskLevel: updatedPatient.riskLevel, 
+                      riskScore: updatedPatient.riskScore,
+                      riskFactors: updatedPatient.riskFactors,
+                      riskNotes: updatedPatient.riskNotes
+                    } 
+                  : p
+              ));
+              setRiskEditPatient(null);
+            }}
+          />
         )}
       </div>
     </DashboardLayout>
