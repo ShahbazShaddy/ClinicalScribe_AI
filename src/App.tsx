@@ -32,6 +32,7 @@ export interface Note {
   date: string;
   duration: number;
   content: Record<string, string>; // Dynamic key-value pairs for flexible sections
+  transcription?: string; // Original voice transcription
   structuredData?: StructuredData; // Extracted vitals, clinical info, symptoms
   previousVisitData?: StructuredData; // For trend comparison
 }
@@ -56,6 +57,12 @@ export interface Patient {
   notes?: string;
   lastVisit?: string;
   visits?: Visit[];
+  // Risk assessment fields
+  riskLevel?: 'low' | 'medium' | 'high';
+  riskScore?: number;
+  riskFactors?: string[];
+  riskAssessedAt?: string;
+  riskNotes?: string;
 }
 
 export interface Visit {
@@ -80,6 +87,19 @@ export interface Visit {
   followUpDate?: string;
   duration: number;
   status: string;
+  // Risk assessment fields
+  riskLevel?: 'low' | 'medium' | 'high';
+  riskScore?: number;
+  riskFactors?: string[];
+  aiRiskAssessment?: {
+    riskLevel: string;
+    riskScore: number;
+    riskFactors: string[];
+    summary: string;
+    concerns: string[];
+    recommendations: string[];
+    followUpUrgency: string;
+  };
 }
 
 function App() {

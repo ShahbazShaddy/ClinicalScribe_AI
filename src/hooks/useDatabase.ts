@@ -123,6 +123,7 @@ export function useDatabase() {
         noteType: noteData.noteType,
         duration: noteData.duration,
         content: noteData.content,
+        transcription: noteData.transcription,
       });
       if (dbNote) {
         return dbNoteToAppNote(dbNote);

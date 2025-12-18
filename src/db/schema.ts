@@ -34,6 +34,12 @@ export const patients = pgTable('patients', {
   medicalRecordNumber: varchar('medical_record_number', { length: 100 }),
   notes: text('notes'),
   isActive: boolean('is_active').default(true).notNull(),
+  // Risk assessment fields
+  riskLevel: varchar('risk_level', { length: 20 }).default('low'),
+  riskScore: integer('risk_score').default(0),
+  riskFactors: jsonb('risk_factors').$type<string[]>().default([]),
+  riskAssessedAt: timestamp('risk_assessed_at'),
+  riskNotes: text('risk_notes'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
@@ -62,6 +68,16 @@ export const visits = pgTable('visits', {
   followUpDate: date('follow_up_date'),
   duration: integer('duration').default(0),
   status: varchar('status', { length: 50 }).default('completed'),
+  // Risk assessment fields for this visit
+  riskLevel: varchar('risk_level', { length: 20 }),
+  riskScore: integer('risk_score'),
+  riskFactors: jsonb('risk_factors').$type<string[]>().default([]),
+  aiRiskAssessment: jsonb('ai_risk_assessment').$type<{
+    summary: string;
+    concerns: string[];
+    recommendations: string[];
+    followUpUrgency: string;
+  }>(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
@@ -122,6 +138,40 @@ export const chatSessions = pgTable('chat_sessions', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
+// Patient chat sessions table
+export const patientChatSessions = pgTable('patient_chat_sessions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  patientId: uuid('patient_id').notNull().references(() => patients.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  title: varchar('title', { length: 255 }).default('Patient Chat'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// Patient chat messages table
+export const patientChatMessages = pgTable('patient_chat_messages', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  sessionId: uuid('session_id').notNull().references(() => patientChatSessions.id, { onDelete: 'cascade' }),
+  patientId: uuid('patient_id').notNull().references(() => patients.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  role: varchar('role', { length: 20 }).notNull(), // 'user' or 'assistant'
+  content: text('content').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+// Patient risk history table for tracking risk over time
+export const patientRiskHistory = pgTable('patient_risk_history', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  patientId: uuid('patient_id').notNull().references(() => patients.id, { onDelete: 'cascade' }),
+  visitId: uuid('visit_id').references(() => visits.id, { onDelete: 'set null' }),
+  riskLevel: varchar('risk_level', { length: 20 }).notNull(),
+  riskScore: integer('risk_score').notNull().default(0),
+  riskFactors: jsonb('risk_factors').$type<string[]>().default([]),
+  assessedBy: varchar('assessed_by', { length: 50 }).default('ai'), // 'ai' or 'manual'
+  notes: text('notes'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
 // Define relations
 export const usersRelations = relations(users, ({ many, one }) => ({
   notes: many(notes),
@@ -139,6 +189,9 @@ export const patientsRelations = relations(patients, ({ one, many }) => ({
   }),
   visits: many(visits),
   notes: many(notes),
+  chatSessions: many(patientChatSessions),
+  chatMessages: many(patientChatMessages),
+  riskHistory: many(patientRiskHistory),
 }));
 
 export const visitsRelations = relations(visits, ({ one }) => ({
@@ -153,6 +206,17 @@ export const visitsRelations = relations(visits, ({ one }) => ({
   note: one(notes, {
     fields: [visits.noteId],
     references: [notes.id],
+  }),
+}));
+
+export const patientRiskHistoryRelations = relations(patientRiskHistory, ({ one }) => ({
+  patient: one(patients, {
+    fields: [patientRiskHistory.patientId],
+    references: [patients.id],
+  }),
+  visit: one(visits, {
+    fields: [patientRiskHistory.visitId],
+    references: [visits.id],
   }),
 }));
 
@@ -193,6 +257,33 @@ export const chatSessionsRelations = relations(chatSessions, ({ one, many }) => 
   messages: many(chatMessages),
 }));
 
+export const patientChatSessionsRelations = relations(patientChatSessions, ({ one, many }) => ({
+  patient: one(patients, {
+    fields: [patientChatSessions.patientId],
+    references: [patients.id],
+  }),
+  user: one(users, {
+    fields: [patientChatSessions.userId],
+    references: [users.id],
+  }),
+  messages: many(patientChatMessages),
+}));
+
+export const patientChatMessagesRelations = relations(patientChatMessages, ({ one }) => ({
+  session: one(patientChatSessions, {
+    fields: [patientChatMessages.sessionId],
+    references: [patientChatSessions.id],
+  }),
+  patient: one(patients, {
+    fields: [patientChatMessages.patientId],
+    references: [patients.id],
+  }),
+  user: one(users, {
+    fields: [patientChatMessages.userId],
+    references: [users.id],
+  }),
+}));
+
 // Type exports for use in the application
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
@@ -214,3 +305,12 @@ export type NewChatMessage = typeof chatMessages.$inferInsert;
 
 export type ChatSession = typeof chatSessions.$inferSelect;
 export type NewChatSession = typeof chatSessions.$inferInsert;
+
+export type PatientChatSession = typeof patientChatSessions.$inferSelect;
+export type NewPatientChatSession = typeof patientChatSessions.$inferInsert;
+
+export type PatientChatMessage = typeof patientChatMessages.$inferSelect;
+export type NewPatientChatMessage = typeof patientChatMessages.$inferInsert;
+
+export type PatientRiskHistory = typeof patientRiskHistory.$inferSelect;
+export type NewPatientRiskHistory = typeof patientRiskHistory.$inferInsert;
