@@ -161,8 +161,9 @@ export async function sendEmail(emailData: EmailData): Promise<{ success: boolea
         toName: emailData.toName,
         subject: emailData.subject,
         body: emailData.body,
-        from: emailData.from || SMTP_CONFIG.fromEmail || 'noreply@clinicalscribe.com',
-        fromName: emailData.fromName || SMTP_CONFIG.fromName || 'ClinicalScribe AI',
+        // Use provided values or let the backend use its defaults
+        from: emailData.from || undefined,
+        fromName: emailData.fromName || undefined,
       }),
     });
 
