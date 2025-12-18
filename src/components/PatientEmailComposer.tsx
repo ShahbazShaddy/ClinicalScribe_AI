@@ -102,15 +102,15 @@ export function PatientEmailComposer({
         setIsLoadingHistory(true);
         try {
           const emails = await getPatientEmails(patient.id);
-          setEmailHistory(emails.map((e: any) => ({
+          setEmailHistory(emails.map(e => ({
             id: e.id,
             subject: e.subject,
             body: e.body,
-            recipientEmail: e.recipient_email || e.recipientEmail,
+            recipientEmail: e.recipientEmail,
             status: e.status,
-            sentAt: e.sent_at ? new Date(e.sent_at).toISOString() : (e.sentAt ? new Date(e.sentAt).toISOString() : undefined),
-            createdAt: e.created_at ? new Date(e.created_at).toISOString() : (e.createdAt ? new Date(e.createdAt).toISOString() : new Date().toISOString()),
-            emailType: e.email_type || e.emailType,
+            sentAt: e.sentAt ? e.sentAt.toString() : undefined,
+            createdAt: e.createdAt.toString(),
+            emailType: e.emailType,
           })));
         } catch (err) {
           console.error('Error loading email history:', err);

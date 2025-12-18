@@ -1969,7 +1969,25 @@ export async function getPatientEmails(patientId: string): Promise<PatientEmail[
     throw error;
   }
 
-  return data || [];
+  // Map snake_case from Supabase to camelCase for TypeScript
+  return (data || []).map((row: any) => ({
+    id: row.id,
+    userId: row.user_id,
+    patientId: row.patient_id,
+    visitId: row.visit_id,
+    subject: row.subject,
+    body: row.body,
+    recipientEmail: row.recipient_email,
+    recipientName: row.recipient_name,
+    emailType: row.email_type,
+    status: row.status,
+    sentAt: row.sent_at ? new Date(row.sent_at) : null,
+    aiGenerated: row.ai_generated,
+    aiPrompt: row.ai_prompt,
+    generationContext: row.generation_context,
+    createdAt: new Date(row.created_at),
+    updatedAt: new Date(row.updated_at),
+  }));
 }
 
 export async function getPatientEmailById(emailId: string): Promise<PatientEmail | null> {
@@ -1988,7 +2006,27 @@ export async function getPatientEmailById(emailId: string): Promise<PatientEmail
     throw error;
   }
 
-  return data;
+  if (!data) return null;
+
+  // Map snake_case from Supabase to camelCase for TypeScript
+  return {
+    id: data.id,
+    userId: data.user_id,
+    patientId: data.patient_id,
+    visitId: data.visit_id,
+    subject: data.subject,
+    body: data.body,
+    recipientEmail: data.recipient_email,
+    recipientName: data.recipient_name,
+    emailType: data.email_type,
+    status: data.status,
+    sentAt: data.sent_at ? new Date(data.sent_at) : null,
+    aiGenerated: data.ai_generated,
+    aiPrompt: data.ai_prompt,
+    generationContext: data.generation_context,
+    createdAt: new Date(data.created_at),
+    updatedAt: new Date(data.updated_at),
+  };
 }
 
 export async function deletePatientEmail(emailId: string): Promise<boolean> {
