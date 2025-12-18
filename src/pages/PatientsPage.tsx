@@ -8,13 +8,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import DashboardLayout from '@/components/layout/DashboardLayout';
-import { Plus, Search, Mic, Eye, Loader2, UserPlus, MessageSquare, BarChart3, Shield, AlertTriangle } from 'lucide-react';
+import { Plus, Search, Mic, Eye, Loader2, UserPlus, MessageSquare, BarChart3, Shield, AlertTriangle, Mail } from 'lucide-react';
 import { toast } from 'sonner';
 import { createPatient, getPatientsByUserId, dbPatientToAppPatient, getVisitsByPatientId } from '@/db/services';
 import { isSupabaseConfigured } from '@/db/client';
 import { PatientChatModal } from '@/components/PatientChatModal';
 import { PatientAnalysisModal } from '@/components/PatientAnalysisModal';
 import { RiskLevelEditor } from '@/components/RiskLevelEditor';
+import { PatientEmailComposer } from '@/components/PatientEmailComposer';
 import { getRiskLevelColor } from '@/services/riskAssessment';
 
 interface PatientsPageProps {
@@ -75,6 +76,7 @@ export default function PatientsPage({ user, onNavigate, onViewPatient, onStartR
   const [chatPatient, setChatPatient] = useState<Patient | null>(null);
   const [analysisPatient, setAnalysisPatient] = useState<Patient | null>(null);
   const [riskEditPatient, setRiskEditPatient] = useState<Patient | null>(null);
+  const [emailPatient, setEmailPatient] = useState<Patient | null>(null);
 
   // Load patients from database
   useEffect(() => {
@@ -501,16 +503,18 @@ export default function PatientsPage({ user, onNavigate, onViewPatient, onStartR
                       </td>
                       <td className="hidden md:table-cell px-3 py-3 sm:px-4 text-center">
                         <Badge 
-                          variant={p.riskLevel === 'high' ? 'destructive' : p.riskLevel === 'medium' ? 'secondary' : 'outline'}
+                          variant={['high', 'critical'].includes(p.riskLevel || '') ? 'destructive' : ['medium', 'moderate'].includes(p.riskLevel || '') ? 'secondary' : 'outline'}
                           className={`cursor-pointer ${
+                            p.riskLevel === 'critical' ? 'bg-purple-600 hover:bg-purple-700 text-white' :
                             p.riskLevel === 'high' ? 'bg-red-500 hover:bg-red-600' : 
-                            p.riskLevel === 'medium' ? 'bg-yellow-500 hover:bg-yellow-600 text-white' : 
+                            ['medium', 'moderate'].includes(p.riskLevel || '') ? 'bg-yellow-500 hover:bg-yellow-600 text-white' : 
                             'bg-green-500 hover:bg-green-600 text-white'
                           }`}
                           onClick={() => setRiskEditPatient(p)}
                         >
+                          {p.riskLevel === 'critical' && <AlertTriangle className="h-3 w-3 mr-1" />}
                           {p.riskLevel === 'high' && <AlertTriangle className="h-3 w-3 mr-1" />}
-                          {p.riskLevel === 'medium' && <Shield className="h-3 w-3 mr-1" />}
+                          {['medium', 'moderate'].includes(p.riskLevel || '') && <Shield className="h-3 w-3 mr-1" />}
                           {(p.riskLevel || 'low').charAt(0).toUpperCase() + (p.riskLevel || 'low').slice(1)}
                           {p.riskScore !== undefined && p.riskScore !== null && (
                             <span className="ml-1 opacity-80">({p.riskScore})</span>
@@ -531,6 +535,16 @@ export default function PatientsPage({ user, onNavigate, onViewPatient, onStartR
                           >
                             <BarChart3 className="h-4 w-4 sm:mr-1" />
                             <span className="hidden lg:inline">Analysis</span>
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => setEmailPatient(p)}
+                            title="Send Email to Patient"
+                            className="hidden sm:flex"
+                          >
+                            <Mail className="h-4 w-4 sm:mr-1" />
+                            <span className="hidden lg:inline">Email</span>
                           </Button>
                           <Button 
                             size="sm" 
@@ -608,6 +622,17 @@ export default function PatientsPage({ user, onNavigate, onViewPatient, onStartR
               ));
               setRiskEditPatient(null);
             }}
+          />
+        )}
+
+        {/* Patient Email Composer Modal */}
+        {emailPatient && (
+          <PatientEmailComposer
+            isOpen={!!emailPatient}
+            onClose={() => setEmailPatient(null)}
+            patient={emailPatient}
+            userId={user.id}
+            doctorName={user.name}
           />
         )}
       </div>

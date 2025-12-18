@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import DashboardLayout from '@/components/layout/DashboardLayout';
+import { PatientEmailComposer } from '@/components/PatientEmailComposer';
 import { 
   ArrowLeft, 
   Mic, 
@@ -30,7 +31,9 @@ import {
   Edit,
   Loader2,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Send,
+  RefreshCw
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { 
@@ -38,9 +41,14 @@ import {
   dbVisitToAppVisit, 
   updatePatient,
   getNoteById,
-  dbNoteToAppNote
+  dbNoteToAppNote,
+  updateVisitRiskAssessment,
+  updatePatientRiskLevel,
+  createPatientRiskHistoryEntry,
+  getPatientVisits
 } from '@/db/services';
 import { isSupabaseConfigured } from '@/db/client';
+import { analyzeVisitRisk, getRiskLevelColor } from '@/services/riskAssessment';
 
 interface PatientDetailPageProps {
   user: User;
@@ -66,6 +74,8 @@ export default function PatientDetailPage({
   const [expandedVisit, setExpandedVisit] = useState<string | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showEmailComposer, setShowEmailComposer] = useState(false);
+  const [reanalyzingVisitId, setReanalyzingVisitId] = useState<string | null>(null);
   const [editFormData, setEditFormData] = useState({
     diagnoses: patient.diagnoses?.join(', ') || '',
     medications: patient.medications?.join(', ') || '',
@@ -106,6 +116,100 @@ export default function PatientDetailPage({
     } catch (error) {
       console.error('Error loading note:', error);
       toast.error('Failed to load note');
+    }
+  };
+
+  const handleReanalyzeRisk = async (visit: Visit) => {
+    if (!visit.noteId) {
+      toast.error('No clinical note available for this visit');
+      return;
+    }
+
+    setReanalyzingVisitId(visit.id);
+    try {
+      // Get the clinical note content
+      const dbNote = await getNoteById(visit.noteId);
+      if (!dbNote) {
+        toast.error('Could not load clinical note');
+        return;
+      }
+
+      const noteContent = dbNote.content || {};
+      
+      // Prepare visit data for risk assessment
+      const visitData = {
+        chiefComplaint: visit.complaint || dbNote.chiefComplaint || '',
+        diagnosis: visit.diagnosis || (noteContent as any)['Assessment'] || (noteContent as any)['Diagnosis'] || '',
+        treatmentPlan: visit.treatmentPlan || (noteContent as any)['Plan'] || (noteContent as any)['Treatment Plan'] || '',
+        summary: visit.summary || (noteContent as any)['Summary'] || '',
+        vitals: visit.vitals || {},
+        noteContent: noteContent as Record<string, string>,
+        transcription: dbNote.transcription || ''
+      };
+
+      const patientData = {
+        name: patient.name,
+        age: patient.age,
+        gender: patient.gender,
+        diagnoses: patient.diagnoses || [],
+        medications: patient.medications || [],
+        allergies: patient.allergies || []
+      };
+
+      // Get previous visits for trend analysis
+      const previousVisits = await getPatientVisits(patient.id);
+      
+      // Run the AI risk assessment
+      const riskAssessment = await analyzeVisitRisk(visitData, patientData, previousVisits);
+      console.log('Re-analyzed risk assessment:', riskAssessment);
+
+      // Update visit with new risk assessment
+      await updateVisitRiskAssessment(visit.id, {
+        riskLevel: riskAssessment.riskLevel,
+        riskScore: riskAssessment.riskScore,
+        riskFactors: riskAssessment.riskFactors,
+        summary: riskAssessment.summary,
+        concerns: riskAssessment.concerns,
+        recommendations: riskAssessment.recommendations,
+        followUpUrgency: riskAssessment.followUpUrgency
+      });
+
+      // Update patient's overall risk level
+      await updatePatientRiskLevel(
+        patient.id,
+        riskAssessment.riskLevel,
+        riskAssessment.riskScore,
+        riskAssessment.riskFactors,
+        riskAssessment.summary
+      );
+
+      // Create risk history entry
+      await createPatientRiskHistoryEntry(
+        patient.id,
+        visit.id,
+        riskAssessment.riskLevel,
+        riskAssessment.riskScore,
+        riskAssessment.riskFactors,
+        'ai',
+        `Re-analyzed: ${riskAssessment.summary}`
+      );
+
+      // Reload visits to reflect changes
+      await loadVisits();
+      
+      // Show success message with risk details
+      toast.success(
+        `Risk re-assessed: ${riskAssessment.riskLevel.toUpperCase()} (${riskAssessment.riskScore}/100)`,
+        { 
+          description: riskAssessment.summary,
+          duration: 5000 
+        }
+      );
+    } catch (error) {
+      console.error('Error re-analyzing risk:', error);
+      toast.error('Failed to re-analyze risk');
+    } finally {
+      setReanalyzingVisitId(null);
     }
   };
 
@@ -183,6 +287,10 @@ export default function PatientDetailPage({
             </div>
           </div>
           <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setShowEmailComposer(true)}>
+              <Send className="h-4 w-4 mr-2" />
+              Email
+            </Button>
             <Button variant="outline" onClick={() => setIsEditDialogOpen(true)}>
               <Edit className="h-4 w-4 mr-2" />
               Edit
@@ -463,9 +571,26 @@ export default function PatientDetailPage({
                               </div>
                             )}
 
-                            {/* View Full Note Button */}
-                            {visit.noteId && (
-                              <div className="pt-2">
+                            {/* Risk Assessment Display */}
+                            {(visit as any).riskLevel && (
+                              <div>
+                                <h4 className="text-xs font-medium text-muted-foreground mb-2">RISK ASSESSMENT</h4>
+                                <div className="flex items-center gap-2">
+                                  <Badge className={getRiskLevelColor((visit as any).riskLevel)}>
+                                    {(visit as any).riskLevel?.toUpperCase()}
+                                  </Badge>
+                                  {(visit as any).riskScore !== undefined && (
+                                    <span className="text-sm text-muted-foreground">
+                                      Score: {(visit as any).riskScore}/100
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Action Buttons */}
+                            <div className="pt-2 flex gap-2">
+                              {visit.noteId && (
                                 <Button 
                                   size="sm" 
                                   variant="outline"
@@ -474,8 +599,28 @@ export default function PatientDetailPage({
                                   <FileText className="h-4 w-4 mr-2" />
                                   View Full Note
                                 </Button>
-                              </div>
-                            )}
+                              )}
+                              {visit.noteId && (
+                                <Button 
+                                  size="sm" 
+                                  variant="outline"
+                                  onClick={() => handleReanalyzeRisk(visit)}
+                                  disabled={reanalyzingVisitId === visit.id}
+                                >
+                                  {reanalyzingVisitId === visit.id ? (
+                                    <>
+                                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                      Analyzing...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <RefreshCw className="h-4 w-4 mr-2" />
+                                      Re-analyze Risk
+                                    </>
+                                  )}
+                                </Button>
+                              )}
+                            </div>
                           </div>
                         )}
                       </div>
@@ -550,6 +695,17 @@ export default function PatientDetailPage({
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Email Composer Modal */}
+      {showEmailComposer && (
+        <PatientEmailComposer
+          isOpen={showEmailComposer}
+          onClose={() => setShowEmailComposer(false)}
+          patient={patient}
+          userId={user.id}
+          doctorName={user.name}
+        />
+      )}
     </DashboardLayout>
   );
 }
