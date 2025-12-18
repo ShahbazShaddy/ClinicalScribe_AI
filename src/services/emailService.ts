@@ -40,6 +40,8 @@ export const SMTP_CONFIG = {
   fromName: import.meta.env.VITE_SMTP_FROM_NAME || 'ClinicalScribe AI',
 };
 
+const EMAIL_API_URL = import.meta.env.VITE_EMAIL_API_URL || '/api/send-email';
+
 /**
  * Check if SMTP is configured
  */
@@ -157,7 +159,7 @@ export async function sendEmail(emailData: EmailData): Promise<{ success: boolea
   try {
     // In production, this would call a backend API endpoint that handles SMTP
     // For example: POST /api/send-email
-    const response = await fetch('/api/send-email', {
+    const response = await fetch(EMAIL_API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -173,7 +175,8 @@ export async function sendEmail(emailData: EmailData): Promise<{ success: boolea
     });
 
     if (!response.ok) {
-      throw new Error('Failed to send email');
+      const errorText = await response.text();
+      throw new Error(`Failed to send email: ${response.status} ${response.statusText} ${errorText}`.trim());
     }
 
     const result = await response.json();
