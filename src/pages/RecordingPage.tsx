@@ -1,27 +1,30 @@
 import { useState, useRef, useEffect } from 'react';
-import { Mic, Square, Loader2, AlertCircle } from 'lucide-react';
+import { Mic, Square, Loader2, AlertCircle, User as UserIcon, ArrowLeft } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import AlertsPanel from '@/components/AlertsPanel';
 import AlertSummaryPanel from '@/components/AlertSummaryPanel';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { generateUniqueId } from '@/lib/utils';
 import { useDatabase } from '@/hooks/useDatabase';
-import type { User, Page, Note } from '@/App';
+import type { User, Page, Note, Patient } from '@/App';
 import { useAI } from '@/hooks/useAI';
 import type { Alert as AlertType } from '@/types/alerts';
 import { generateSimulatedAlerts } from '@/lib/alertDefinitions';
+import { createVisit } from '@/db/services';
 
 interface RecordingPageProps {
   user: User;
+  patient?: Patient; // Optional patient for patient-specific recording
   onNavigate: (page: Page) => void;
   onLogout: () => void;
   onNoteCreated: (note: Note) => void;
 }
 
-export default function RecordingPage({ user, onNavigate, onLogout, onNoteCreated }: RecordingPageProps) {
+export default function RecordingPage({ user, patient, onNavigate, onLogout, onNoteCreated }: RecordingPageProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
@@ -148,10 +151,12 @@ export default function RecordingPage({ user, onNavigate, onLogout, onNoteCreate
       const transcribedText = await transcribeClinicalRecording(recordingBlob);
       console.log('Transcribed text:', transcribedText);
       
-      // Step 2: Extract patient information from audio
+      // Step 2: Extract patient information from audio (use patient info if available)
       setProcessingStep('Extracting patient information...');
       console.log('📋 Extracting patient info from audio');
-      const patientInfo = await extractPatientInfoFromAudio(transcribedText);
+      const patientInfo = patient 
+        ? { name: patient.name, age: patient.age?.toString(), chiefComplaint: '' }
+        : await extractPatientInfoFromAudio(transcribedText);
       console.log('Extracted patient info:', patientInfo);
       
       // Step 3: Generate dynamic note sections based on content
@@ -166,9 +171,10 @@ export default function RecordingPage({ user, onNavigate, onLogout, onNoteCreate
 
       const note: Note = {
         id: generateUniqueId(),
-        patientName: patientInfo.name || `Patient-${generateUniqueId()}`,
-        patientAge: patientInfo.age,
-        chiefComplaint: patientInfo.chiefComplaint,
+        patientId: patient?.id,
+        patientName: patient?.name || patientInfo.name || `Patient-${generateUniqueId()}`,
+        patientAge: patient?.age?.toString() || patientInfo.age,
+        chiefComplaint: patientInfo.chiefComplaint || noteContent['Chief Complaint'] || '',
         noteType: 'Flexible', // Mark as flexible/dynamic
         date: new Date().toISOString(),
         duration: duration,
@@ -176,6 +182,7 @@ export default function RecordingPage({ user, onNavigate, onLogout, onNoteCreate
       };
 
       console.log('Creating note with extracted patient info:', {
+        patientId: note.patientId,
         patientName: note.patientName,
         patientAge: note.patientAge,
         chiefComplaint: note.chiefComplaint,
@@ -186,9 +193,11 @@ export default function RecordingPage({ user, onNavigate, onLogout, onNoteCreate
       });
 
       // Save to database
+      let savedNoteId: string | undefined;
       try {
         const userId = user.id || generateUniqueId();
         const savedNote = await saveNote(userId, {
+          patientId: patient?.id,
           patientName: note.patientName,
           patientAge: note.patientAge,
           chiefComplaint: note.chiefComplaint,
@@ -197,10 +206,31 @@ export default function RecordingPage({ user, onNavigate, onLogout, onNoteCreate
           content: note.content
         });
         
+        savedNoteId = savedNote?.id;
         console.log('Note saved to database:', {
           savedNote,
           duration: savedNote?.duration
         });
+
+        // If recording for a patient, create a visit record
+        if (patient && savedNote) {
+          setProcessingStep('Creating visit record...');
+          const visit = await createVisit({
+            patientId: patient.id,
+            userId: userId,
+            noteId: savedNote.id,
+            visitDate: new Date().toISOString(),
+            visitType: 'routine',
+            chiefComplaint: note.chiefComplaint || '',
+            vitals: {},
+            summary: noteContent['Assessment'] || noteContent['Summary'] || '',
+            diagnosis: noteContent['Assessment'] || noteContent['Diagnosis'] || '',
+            treatmentPlan: noteContent['Plan'] || noteContent['Treatment Plan'] || '',
+            duration: note.duration,
+            status: 'completed',
+          });
+          console.log('Visit created:', visit);
+        }
       } catch (dbErr) {
         console.error('Error saving to database:', dbErr);
         // Continue anyway - note will still be used via parent callback
@@ -249,12 +279,50 @@ export default function RecordingPage({ user, onNavigate, onLogout, onNoteCreate
   const hasNewAlert = alerts.some(a => !a.dismissed && !a.addedToPlan);
 
   return (
-    <DashboardLayout user={user} currentPage="recording" onNavigate={onNavigate} onLogout={onLogout}>
+    <DashboardLayout user={user} currentPage={patient ? "patient" : "recording"} onNavigate={onNavigate} onLogout={onLogout}>
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 sm:gap-6 animate-fade-in">
         {/* Main Content - Recording Interface */}
         <div className="lg:col-span-3 space-y-6 sm:space-y-8">
+          {/* Patient Context Header */}
+          {patient && (
+            <div className="flex items-center gap-4">
+              <Button variant="ghost" size="icon" onClick={() => onNavigate('patient')}>
+                <ArrowLeft className="h-5 w-5" />
+              </Button>
+              <Card className="flex-1">
+                <CardContent className="py-3 px-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                      <UserIcon className="h-5 w-5 text-primary" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="font-medium">{patient.name}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {patient.age && `${patient.age} yrs`}
+                        {patient.age && patient.gender && ' • '}
+                        {patient.gender && (patient.gender === 'M' ? 'Male' : patient.gender === 'F' ? 'Female' : 'Other')}
+                      </div>
+                    </div>
+                    {patient.diagnoses && patient.diagnoses.length > 0 && (
+                      <div className="hidden sm:flex flex-wrap gap-1">
+                        {patient.diagnoses.slice(0, 2).map((d, i) => (
+                          <Badge key={i} variant="secondary" className="text-xs">{d}</Badge>
+                        ))}
+                        {patient.diagnoses.length > 2 && (
+                          <Badge variant="outline" className="text-xs">+{patient.diagnoses.length - 2}</Badge>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold mb-1 sm:mb-2">Create New Clinical Note</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold mb-1 sm:mb-2">
+              {patient ? `New Visit for ${patient.name}` : 'Create New Clinical Note'}
+            </h1>
             <p className="text-xs sm:text-sm text-muted-foreground">
               Record patient conversation and generate structured documentation using AI
             </p>

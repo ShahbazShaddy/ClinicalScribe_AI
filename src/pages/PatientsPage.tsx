@@ -1,152 +1,501 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import type { User, Patient, Page } from '@/App';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import DashboardLayout from '@/components/layout/DashboardLayout';
+import { Plus, Search, Mic, Eye, Loader2, UserPlus } from 'lucide-react';
+import { toast } from 'sonner';
+import { createPatient, getPatientsByUserId, dbPatientToAppPatient, getVisitsByPatientId } from '@/db/services';
+import { isSupabaseConfigured } from '@/db/client';
 
 interface PatientsPageProps {
   user: User;
   onNavigate: (page: Page) => void;
   onViewPatient: (patient: Patient) => void;
+  onStartRecording: (patient: Patient) => void;
+  onPatientAdded: (patient: Patient) => void;
   onLogout: () => void;
 }
 
-const SAMPLE_PATIENTS: Patient[] = [
-  {
-    id: 'p1',
-    name: 'Sarah Johnson',
-    age: 52,
-    gender: 'F',
-    diagnoses: ['Type 2 Diabetes', 'Hypertension'],
-    medications: ['Metformin 500mg', 'Lisinopril 10mg'],
-    allergies: ['Penicillin'],
-    lastVisit: '2025-11-12',
-    visits: new Array(8).fill(0).map((_, i) => ({
-      date: new Date(Date.now() - i * 30 * 24 * 3600 * 1000).toISOString().slice(0,10),
-      complaint: i === 0 ? 'Routine diabetes follow-up' : 'Follow-up',
-      vitals: { bp: '130/80', weight: 78 - i * 0.2 },
-      summary: 'Stable glycemic control, small medication adjustment.' ,
-      type: i === 0 ? 'follow-up' : 'routine'
-    }))
-  },
-  {
-    id: 'p2',
-    name: 'John Martinez',
-    age: 65,
-    gender: 'M',
-    diagnoses: ['CHF', 'CAD'],
-    medications: ['Furosemide 40mg', 'Aspirin 81mg'],
-    allergies: [],
-    lastVisit: '2025-11-10',
-    visits: new Array(12).fill(0).map((_, i) => ({
-      date: new Date(Date.now() - i * 14 * 24 * 3600 * 1000).toISOString().slice(0,10),
-      complaint: i % 3 === 0 ? 'Dyspnea' : 'Medication check',
-      vitals: { bp: '140/85', weight: 92 - i * 0.1 },
-      summary: 'Manage fluid status and optimize diuretics.',
-      type: i % 3 === 0 ? 'urgent' : 'follow-up'
-    }))
-  },
-  {
-    id: 'p3',
-    name: 'Emily Chen',
-    age: 48,
-    gender: 'F',
-    diagnoses: ['Asthma', 'Anxiety'],
-    medications: ['Budesonide inhaler', 'Sertraline 50mg'],
-    allergies: ['Sulfa'],
-    lastVisit: '2025-10-02',
-    visits: new Array(6).fill(0).map((_, i) => ({
-      date: new Date(Date.now() - i * 45 * 24 * 3600 * 1000).toISOString().slice(0,10),
-      complaint: 'Wheeze / cough',
-      vitals: { bp: '120/76', weight: 64 + i * 0.3 },
-      summary: 'Adjusted inhaler technique and reviewed action plan.',
-      type: 'routine'
-    }))
-  },
-  {
-    id: 'p4',
-    name: 'Robert Williams',
-    age: 71,
-    gender: 'M',
-    diagnoses: ['COPD', 'HTN', 'Hyperlipidemia'],
-    medications: ['Atorvastatin 20mg', 'Amlodipine 5mg'],
-    allergies: [],
-    lastVisit: '2025-11-20',
-    visits: new Array(10).fill(0).map((_, i) => ({
-      date: new Date(Date.now() - i * 28 * 24 * 3600 * 1000).toISOString().slice(0,10),
-      complaint: i % 4 === 0 ? 'Exacerbation' : 'Routine COPD review',
-      vitals: { bp: '135/78', weight: 80 - i * 0.2 },
-      summary: 'Pulmonary status reviewed; inhaler plan reinforced.',
-      type: i % 4 === 0 ? 'urgent' : 'routine'
-    }))
-  },
-  // Additional sample patients
-  { id: 'p5', name: 'Aisha Khan', age: 39, gender: 'F', diagnoses:['Hypothyroidism'], medications:['Levothyroxine 75mcg'], allergies:[], lastVisit:'2025-09-15', visits: [{date:'2025-09-15', complaint:'Routine', vitals:{bp:'118/72', weight:68}, summary:'TSH stable', type:'routine'}] },
-  { id: 'p6', name: 'Michael Brown', age: 57, gender: 'M', diagnoses:['CKD stage 3'], medications:['Losartan 50mg'], allergies:['Latex'], lastVisit:'2025-08-20', visits:[{date:'2025-08-20', complaint:'Renal function review', vitals:{bp:'145/88', weight:85}, summary:'Monitor eGFR and labs', type:'follow-up'}] },
-  { id: 'p7', name: 'Olivia Davis', age: 29, gender: 'F', diagnoses:['Migraine'], medications:['Topiramate 50mg'], allergies:[], lastVisit:'2025-07-11', visits:[{date:'2025-07-11', complaint:'Migraine frequency increase', vitals:{bp:'110/70', weight:59}, summary:'Titrated medication', type:'routine'}] },
-  { id: 'p8', name: 'Daniel Lee', age: 45, gender: 'M', diagnoses:['Obesity', 'OSA'], medications:['CPAP'], allergies:[], lastVisit:'2025-06-05', visits:[{date:'2025-06-05', complaint:'Weight management', vitals:{bp:'132/82', weight:105}, summary:'Dietary counseling', type:'follow-up'}] }
-];
+interface NewPatientForm {
+  name: string;
+  age: string;
+  gender: 'M' | 'F' | 'O';
+  dateOfBirth: string;
+  phone: string;
+  email: string;
+  address: string;
+  diagnoses: string;
+  medications: string;
+  allergies: string;
+  emergencyContact: string;
+  emergencyPhone: string;
+  insuranceProvider: string;
+  insuranceId: string;
+  medicalRecordNumber: string;
+  notes: string;
+}
 
-export default function PatientsPage({ user, onNavigate, onViewPatient, onLogout }: PatientsPageProps) {
+const initialFormState: NewPatientForm = {
+  name: '',
+  age: '',
+  gender: 'M',
+  dateOfBirth: '',
+  phone: '',
+  email: '',
+  address: '',
+  diagnoses: '',
+  medications: '',
+  allergies: '',
+  emergencyContact: '',
+  emergencyPhone: '',
+  insuranceProvider: '',
+  insuranceId: '',
+  medicalRecordNumber: '',
+  notes: '',
+};
+
+export default function PatientsPage({ user, onNavigate, onViewPatient, onStartRecording, onPatientAdded, onLogout }: PatientsPageProps) {
   const [query, setQuery] = useState('');
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formData, setFormData] = useState<NewPatientForm>(initialFormState);
 
-  const patients = useMemo(() => {
+  // Load patients from database
+  useEffect(() => {
+    loadPatients();
+  }, [user.id]);
+
+  const loadPatients = async () => {
+    if (!user.id || !isSupabaseConfigured()) {
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      const dbPatients = await getPatientsByUserId(user.id);
+      
+      // Convert and get last visit date for each patient
+      const patientsWithVisits = await Promise.all(
+        dbPatients.map(async (p) => {
+          const patient = dbPatientToAppPatient(p);
+          const visits = await getVisitsByPatientId(p.id);
+          if (visits.length > 0) {
+            patient.lastVisit = new Date(visits[0].visitDate).toISOString().split('T')[0];
+          }
+          return { ...patient, visitCount: visits.length };
+        })
+      );
+      
+      setPatients(patientsWithVisits as Patient[]);
+    } catch (error) {
+      console.error('Error loading patients:', error);
+      toast.error('Failed to load patients');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const filteredPatients = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return SAMPLE_PATIENTS.filter(p => p.name.toLowerCase().includes(q));
-  }, [query]);
+    if (!q) return patients;
+    return patients.filter(p => 
+      p.name.toLowerCase().includes(q) ||
+      p.email?.toLowerCase().includes(q) ||
+      p.phone?.includes(q)
+    );
+  }, [query, patients]);
+
+  const handleInputChange = (field: keyof NewPatientForm, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!formData.name.trim()) {
+      toast.error('Patient name is required');
+      return;
+    }
+
+    if (!user.id) {
+      toast.error('User not authenticated');
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const newPatient = await createPatient({
+        userId: user.id,
+        name: formData.name.trim(),
+        age: formData.age ? parseInt(formData.age) : null,
+        gender: formData.gender,
+        dateOfBirth: formData.dateOfBirth || null,
+        phone: formData.phone || null,
+        email: formData.email || null,
+        address: formData.address || null,
+        diagnoses: formData.diagnoses ? formData.diagnoses.split(',').map(d => d.trim()).filter(Boolean) : [],
+        medications: formData.medications ? formData.medications.split(',').map(m => m.trim()).filter(Boolean) : [],
+        allergies: formData.allergies ? formData.allergies.split(',').map(a => a.trim()).filter(Boolean) : [],
+        emergencyContact: formData.emergencyContact || null,
+        emergencyPhone: formData.emergencyPhone || null,
+        insuranceProvider: formData.insuranceProvider || null,
+        insuranceId: formData.insuranceId || null,
+        medicalRecordNumber: formData.medicalRecordNumber || null,
+        notes: formData.notes || null,
+        isActive: true,
+      });
+
+      if (newPatient) {
+        const convertedPatient = dbPatientToAppPatient(newPatient);
+        toast.success('Patient added successfully');
+        setIsAddDialogOpen(false);
+        setFormData(initialFormState);
+        loadPatients();
+        onPatientAdded(convertedPatient as Patient);
+      }
+    } catch (error) {
+      console.error('Error creating patient:', error);
+      toast.error('Failed to add patient');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <DashboardLayout user={user} currentPage="patients" onNavigate={onNavigate} onLogout={onLogout}>
       <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-primary">Patient Records</h1>
-          <p className="text-sm text-muted-foreground">Search and review patient timelines</p>
-        </div>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <input
-            type="search"
-            placeholder="Search patients by name"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            className="rounded-md border px-3 py-2 w-full sm:w-64"
-          />
-          <Button variant="ghost" onClick={() => { setQuery(''); }} className="w-full sm:w-auto">
-            Clear
-          </Button>
-        </div>
-      </div>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold text-primary">Patient Records</h1>
+            <p className="text-sm text-muted-foreground">Manage patients and their visit history</p>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="search"
+                placeholder="Search patients..."
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                className="pl-10 w-full sm:w-64"
+              />
+            </div>
+            <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+              <DialogTrigger asChild>
+                <Button className="w-full sm:w-auto">
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  Add Patient
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>Add New Patient</DialogTitle>
+                </DialogHeader>
+                <form onSubmit={handleSubmit} className="space-y-6 pt-4">
+                  {/* Basic Information */}
+                  <div className="space-y-4">
+                    <h3 className="text-sm font-semibold text-muted-foreground">Basic Information</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="name">Full Name *</Label>
+                        <Input
+                          id="name"
+                          value={formData.name}
+                          onChange={(e) => handleInputChange('name', e.target.value)}
+                          placeholder="John Doe"
+                          required
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="age">Age</Label>
+                        <Input
+                          id="age"
+                          type="number"
+                          value={formData.age}
+                          onChange={(e) => handleInputChange('age', e.target.value)}
+                          placeholder="35"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="gender">Gender</Label>
+                        <Select value={formData.gender} onValueChange={(value) => handleInputChange('gender', value)}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select gender" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="M">Male</SelectItem>
+                            <SelectItem value="F">Female</SelectItem>
+                            <SelectItem value="O">Other</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="dob">Date of Birth</Label>
+                        <Input
+                          id="dob"
+                          type="date"
+                          value={formData.dateOfBirth}
+                          onChange={(e) => handleInputChange('dateOfBirth', e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  </div>
 
-      <div className="bg-card rounded-lg shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full table-auto text-sm">
-            <thead className="bg-sky-50 sticky top-0">
-              <tr>
-                <th className="text-left px-3 py-3 sm:px-4">Patient Name</th>
-                <th className="hidden sm:table-cell text-left px-3 py-3 sm:px-4">Age</th>
-                <th className="hidden md:table-cell text-left px-3 py-3 sm:px-4">Last Visit</th>
-                <th className="hidden lg:table-cell text-left px-3 py-3 sm:px-4">Total Visits</th>
-                <th className="text-right px-3 py-3 sm:px-4">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {patients.map(p => (
-                <tr key={p.id} className="border-t hover:bg-accent/50 transition-colors">
-                  <td className="px-3 py-3 sm:px-4">
-                    <div className="font-medium">{p.name}</div>
-                    <div className="text-xs text-muted-foreground line-clamp-1">{p.diagnoses.join(', ')}</div>
-                  </td>
-                  <td className="hidden sm:table-cell px-3 py-3 sm:px-4">{p.age}</td>
-                  <td className="hidden md:table-cell px-3 py-3 sm:px-4">{p.lastVisit}</td>
-                  <td className="hidden lg:table-cell px-3 py-3 sm:px-4">{p.visits?.length ?? 0}</td>
-                  <td className="px-3 py-3 sm:px-4 text-right">
-                    <Button size="sm" onClick={() => onViewPatient(p)}>View</Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  {/* Contact Information */}
+                  <div className="space-y-4">
+                    <h3 className="text-sm font-semibold text-muted-foreground">Contact Information</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="phone">Phone</Label>
+                        <Input
+                          id="phone"
+                          type="tel"
+                          value={formData.phone}
+                          onChange={(e) => handleInputChange('phone', e.target.value)}
+                          placeholder="+1 (555) 123-4567"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="email">Email</Label>
+                        <Input
+                          id="email"
+                          type="email"
+                          value={formData.email}
+                          onChange={(e) => handleInputChange('email', e.target.value)}
+                          placeholder="john@example.com"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="address">Address</Label>
+                      <Textarea
+                        id="address"
+                        value={formData.address}
+                        onChange={(e) => handleInputChange('address', e.target.value)}
+                        placeholder="123 Main St, City, State 12345"
+                        rows={2}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Medical Information */}
+                  <div className="space-y-4">
+                    <h3 className="text-sm font-semibold text-muted-foreground">Medical Information</h3>
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="diagnoses">Diagnoses (comma-separated)</Label>
+                        <Input
+                          id="diagnoses"
+                          value={formData.diagnoses}
+                          onChange={(e) => handleInputChange('diagnoses', e.target.value)}
+                          placeholder="Type 2 Diabetes, Hypertension"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="medications">Medications (comma-separated)</Label>
+                        <Input
+                          id="medications"
+                          value={formData.medications}
+                          onChange={(e) => handleInputChange('medications', e.target.value)}
+                          placeholder="Metformin 500mg, Lisinopril 10mg"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="allergies">Allergies (comma-separated)</Label>
+                        <Input
+                          id="allergies"
+                          value={formData.allergies}
+                          onChange={(e) => handleInputChange('allergies', e.target.value)}
+                          placeholder="Penicillin, Sulfa"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="mrn">Medical Record Number</Label>
+                        <Input
+                          id="mrn"
+                          value={formData.medicalRecordNumber}
+                          onChange={(e) => handleInputChange('medicalRecordNumber', e.target.value)}
+                          placeholder="MRN-123456"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Emergency Contact */}
+                  <div className="space-y-4">
+                    <h3 className="text-sm font-semibold text-muted-foreground">Emergency Contact</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="emergencyContact">Contact Name</Label>
+                        <Input
+                          id="emergencyContact"
+                          value={formData.emergencyContact}
+                          onChange={(e) => handleInputChange('emergencyContact', e.target.value)}
+                          placeholder="Jane Doe"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="emergencyPhone">Contact Phone</Label>
+                        <Input
+                          id="emergencyPhone"
+                          type="tel"
+                          value={formData.emergencyPhone}
+                          onChange={(e) => handleInputChange('emergencyPhone', e.target.value)}
+                          placeholder="+1 (555) 987-6543"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Insurance Information */}
+                  <div className="space-y-4">
+                    <h3 className="text-sm font-semibold text-muted-foreground">Insurance Information</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="insuranceProvider">Insurance Provider</Label>
+                        <Input
+                          id="insuranceProvider"
+                          value={formData.insuranceProvider}
+                          onChange={(e) => handleInputChange('insuranceProvider', e.target.value)}
+                          placeholder="Blue Cross Blue Shield"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="insuranceId">Insurance ID</Label>
+                        <Input
+                          id="insuranceId"
+                          value={formData.insuranceId}
+                          onChange={(e) => handleInputChange('insuranceId', e.target.value)}
+                          placeholder="INS-123456789"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Notes */}
+                  <div className="space-y-4">
+                    <h3 className="text-sm font-semibold text-muted-foreground">Additional Notes</h3>
+                    <Textarea
+                      id="notes"
+                      value={formData.notes}
+                      onChange={(e) => handleInputChange('notes', e.target.value)}
+                      placeholder="Any additional notes about the patient..."
+                      rows={3}
+                    />
+                  </div>
+
+                  <div className="flex justify-end gap-3 pt-4">
+                    <Button type="button" variant="outline" onClick={() => setIsAddDialogOpen(false)}>
+                      Cancel
+                    </Button>
+                    <Button type="submit" disabled={isSubmitting}>
+                      {isSubmitting ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Adding...
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="h-4 w-4 mr-2" />
+                          Add Patient
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </form>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
-      </div>
+
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
+        ) : filteredPatients.length === 0 ? (
+          <div className="bg-card rounded-lg shadow-sm p-12 text-center">
+            <UserPlus className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+            <h3 className="text-lg font-medium mb-2">No patients found</h3>
+            <p className="text-muted-foreground mb-4">
+              {query ? 'Try adjusting your search criteria' : 'Get started by adding your first patient'}
+            </p>
+            {!query && (
+              <Button onClick={() => setIsAddDialogOpen(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Your First Patient
+              </Button>
+            )}
+          </div>
+        ) : (
+          <div className="bg-card rounded-lg shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full table-auto text-sm">
+                <thead className="bg-sky-50 sticky top-0">
+                  <tr>
+                    <th className="text-left px-3 py-3 sm:px-4">Patient Name</th>
+                    <th className="hidden sm:table-cell text-left px-3 py-3 sm:px-4">Age</th>
+                    <th className="hidden md:table-cell text-left px-3 py-3 sm:px-4">Contact</th>
+                    <th className="hidden lg:table-cell text-left px-3 py-3 sm:px-4">Last Visit</th>
+                    <th className="text-right px-3 py-3 sm:px-4">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredPatients.map(p => (
+                    <tr key={p.id} className="border-t hover:bg-accent/50 transition-colors">
+                      <td className="px-3 py-3 sm:px-4">
+                        <div className="font-medium">{p.name}</div>
+                        <div className="text-xs text-muted-foreground line-clamp-1">
+                          {p.diagnoses?.length > 0 ? p.diagnoses.join(', ') : 'No diagnoses'}
+                        </div>
+                      </td>
+                      <td className="hidden sm:table-cell px-3 py-3 sm:px-4">
+                        {p.age || '—'} {p.gender ? `(${p.gender})` : ''}
+                      </td>
+                      <td className="hidden md:table-cell px-3 py-3 sm:px-4">
+                        <div className="text-xs">
+                          {p.phone && <div>{p.phone}</div>}
+                          {p.email && <div className="text-muted-foreground">{p.email}</div>}
+                          {!p.phone && !p.email && <span className="text-muted-foreground">—</span>}
+                        </div>
+                      </td>
+                      <td className="hidden lg:table-cell px-3 py-3 sm:px-4">
+                        {p.lastVisit || 'No visits yet'}
+                      </td>
+                      <td className="px-3 py-3 sm:px-4">
+                        <div className="flex items-center justify-end gap-2">
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => onViewPatient(p)}
+                          >
+                            <Eye className="h-4 w-4 sm:mr-1" />
+                            <span className="hidden sm:inline">View</span>
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            onClick={() => onStartRecording(p)}
+                          >
+                            <Mic className="h-4 w-4 sm:mr-1" />
+                            <span className="hidden sm:inline">Record</span>
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
     </DashboardLayout>
   );

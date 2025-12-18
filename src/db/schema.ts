@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, integer, jsonb, varchar, boolean } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, timestamp, integer, jsonb, varchar, boolean, date } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
 // Users table
@@ -13,10 +13,64 @@ export const users = pgTable('users', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
+// Patients table
+export const patients = pgTable('patients', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  name: varchar('name', { length: 255 }).notNull(),
+  age: integer('age'),
+  gender: varchar('gender', { length: 10 }),
+  dateOfBirth: date('date_of_birth'),
+  phone: varchar('phone', { length: 50 }),
+  email: varchar('email', { length: 255 }),
+  address: text('address'),
+  diagnoses: text('diagnoses').array().default([]),
+  medications: text('medications').array().default([]),
+  allergies: text('allergies').array().default([]),
+  emergencyContact: varchar('emergency_contact', { length: 255 }),
+  emergencyPhone: varchar('emergency_phone', { length: 50 }),
+  insuranceProvider: varchar('insurance_provider', { length: 255 }),
+  insuranceId: varchar('insurance_id', { length: 100 }),
+  medicalRecordNumber: varchar('medical_record_number', { length: 100 }),
+  notes: text('notes'),
+  isActive: boolean('is_active').default(true).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// Visits table
+export const visits = pgTable('visits', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  patientId: uuid('patient_id').notNull().references(() => patients.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  noteId: uuid('note_id').references(() => notes.id, { onDelete: 'set null' }),
+  visitDate: timestamp('visit_date').defaultNow().notNull(),
+  visitType: varchar('visit_type', { length: 50 }).default('routine'),
+  chiefComplaint: text('chief_complaint'),
+  vitals: jsonb('vitals').$type<{
+    bp?: string;
+    weight?: number;
+    height?: number;
+    temperature?: number;
+    heartRate?: number;
+    respiratoryRate?: number;
+    oxygenSaturation?: number;
+  }>().default({}),
+  summary: text('summary'),
+  diagnosis: text('diagnosis'),
+  treatmentPlan: text('treatment_plan'),
+  followUpDate: date('follow_up_date'),
+  duration: integer('duration').default(0),
+  status: varchar('status', { length: 50 }).default('completed'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
 // Notes table
 export const notes = pgTable('notes', {
   id: uuid('id').primaryKey().defaultRandom(),
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  patientId: uuid('patient_id').references(() => patients.id, { onDelete: 'set null' }),
   patientName: varchar('patient_name', { length: 255 }).notNull(),
   patientAge: varchar('patient_age', { length: 50 }),
   chiefComplaint: text('chief_complaint'),
@@ -71,15 +125,45 @@ export const chatSessions = pgTable('chat_sessions', {
 // Define relations
 export const usersRelations = relations(users, ({ many, one }) => ({
   notes: many(notes),
+  patients: many(patients),
+  visits: many(visits),
   settings: one(userSettings),
   chatMessages: many(chatMessages),
   chatSessions: many(chatSessions),
+}));
+
+export const patientsRelations = relations(patients, ({ one, many }) => ({
+  user: one(users, {
+    fields: [patients.userId],
+    references: [users.id],
+  }),
+  visits: many(visits),
+  notes: many(notes),
+}));
+
+export const visitsRelations = relations(visits, ({ one }) => ({
+  patient: one(patients, {
+    fields: [visits.patientId],
+    references: [patients.id],
+  }),
+  user: one(users, {
+    fields: [visits.userId],
+    references: [users.id],
+  }),
+  note: one(notes, {
+    fields: [visits.noteId],
+    references: [notes.id],
+  }),
 }));
 
 export const notesRelations = relations(notes, ({ one }) => ({
   user: one(users, {
     fields: [notes.userId],
     references: [users.id],
+  }),
+  patient: one(patients, {
+    fields: [notes.patientId],
+    references: [patients.id],
   }),
 }));
 
@@ -112,6 +196,12 @@ export const chatSessionsRelations = relations(chatSessions, ({ one, many }) => 
 // Type exports for use in the application
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
+
+export type Patient = typeof patients.$inferSelect;
+export type NewPatient = typeof patients.$inferInsert;
+
+export type Visit = typeof visits.$inferSelect;
+export type NewVisit = typeof visits.$inferInsert;
 
 export type Note = typeof notes.$inferSelect;
 export type NewNote = typeof notes.$inferInsert;

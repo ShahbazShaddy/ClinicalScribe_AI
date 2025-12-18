@@ -104,7 +104,7 @@ export function useDatabase() {
 
   const saveNote = useCallback(async (
     userId: string,
-    noteData: Omit<AppNote, 'id' | 'date'>
+    noteData: Omit<AppNote, 'id' | 'date'> & { patientId?: string }
   ): Promise<AppNote | null> => {
     if (!isConfigured) {
       setError('Database not configured');
@@ -116,6 +116,7 @@ export function useDatabase() {
     try {
       const dbNote = await createNote({
         userId,
+        patientId: noteData.patientId,
         patientName: noteData.patientName,
         patientAge: noteData.patientAge,
         chiefComplaint: noteData.chiefComplaint,

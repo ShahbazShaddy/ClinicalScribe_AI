@@ -1,5 +1,5 @@
 import supabase, { isSupabaseConfigured } from './client';
-import type { User, NewUser, Note, NewNote, UserSettings, NewUserSettings, ChatMessage, NewChatMessage, ChatSession, NewChatSession } from './schema';
+import type { User, NewUser, Note, NewNote, UserSettings, NewUserSettings, ChatMessage, NewChatMessage, ChatSession, NewChatSession, Patient, NewPatient, Visit, NewVisit } from './schema';
 
 // ============================================
 // User Operations
@@ -116,6 +116,7 @@ export async function createNote(noteData: Omit<NewNote, 'id' | 'createdAt' | 'u
     .from('notes')
     .insert({
       user_id: noteData.userId,
+      patient_id: noteData.patientId || null,
       patient_name: noteData.patientName,
       patient_age: noteData.patientAge,
       chief_complaint: noteData.chiefComplaint,
@@ -355,10 +356,11 @@ export async function getNotesByDateRange(
 
 export function dbNoteToAppNote(dbNote: any): {
   id: string;
+  patientId?: string;
   patientName: string;
   patientAge?: string;
   chiefComplaint?: string;
-  noteType: 'SOAP' | 'Progress' | 'Consultation' | 'H&P';
+  noteType: 'SOAP' | 'Progress' | 'Consultation' | 'H&P' | 'Flexible';
   date: string;
   duration: number;
   content: {
@@ -375,6 +377,7 @@ export function dbNoteToAppNote(dbNote: any): {
   
   return {
     id: dbNote.id,
+    patientId: dbNote.patient_id,
     patientName: dbNote.patient_name,
     patientAge: dbNote.patient_age,
     chiefComplaint: dbNote.chief_complaint,
@@ -612,4 +615,427 @@ export async function deleteChatSession(sessionId: string): Promise<boolean> {
     console.error('Error deleting chat session:', err);
     throw err;
   }
+}
+
+// ============================================
+// Patient Operations
+// ============================================
+
+export async function createPatient(patientData: Omit<NewPatient, 'id' | 'createdAt' | 'updatedAt'>): Promise<Patient | null> {
+  if (!isSupabaseConfigured()) {
+    console.warn('Supabase not configured');
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from('patients')
+    .insert({
+      user_id: patientData.userId,
+      name: patientData.name,
+      age: patientData.age,
+      gender: patientData.gender,
+      date_of_birth: patientData.dateOfBirth,
+      phone: patientData.phone,
+      email: patientData.email,
+      address: patientData.address,
+      diagnoses: patientData.diagnoses || [],
+      medications: patientData.medications || [],
+      allergies: patientData.allergies || [],
+      emergency_contact: patientData.emergencyContact,
+      emergency_phone: patientData.emergencyPhone,
+      insurance_provider: patientData.insuranceProvider,
+      insurance_id: patientData.insuranceId,
+      medical_record_number: patientData.medicalRecordNumber,
+      notes: patientData.notes,
+      is_active: patientData.isActive ?? true,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error creating patient:', error);
+    throw error;
+  }
+
+  return data;
+}
+
+export async function getPatientById(id: string): Promise<Patient | null> {
+  if (!isSupabaseConfigured()) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from('patients')
+    .select('*')
+    .eq('id', id)
+    .single();
+
+  if (error && error.code !== 'PGRST116') {
+    console.error('Error fetching patient:', error);
+    throw error;
+  }
+
+  return data;
+}
+
+export async function getPatientsByUserId(userId: string): Promise<Patient[]> {
+  if (!isSupabaseConfigured()) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from('patients')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('is_active', true)
+    .order('name', { ascending: true });
+
+  if (error) {
+    console.error('Error fetching patients:', error);
+    throw error;
+  }
+
+  return data || [];
+}
+
+export async function updatePatient(id: string, updates: Partial<Patient>): Promise<Patient | null> {
+  if (!isSupabaseConfigured()) {
+    return null;
+  }
+
+  const dbUpdates: Record<string, unknown> = {
+    updated_at: new Date().toISOString(),
+  };
+
+  if (updates.name !== undefined) dbUpdates.name = updates.name;
+  if (updates.age !== undefined) dbUpdates.age = updates.age;
+  if (updates.gender !== undefined) dbUpdates.gender = updates.gender;
+  if (updates.dateOfBirth !== undefined) dbUpdates.date_of_birth = updates.dateOfBirth;
+  if (updates.phone !== undefined) dbUpdates.phone = updates.phone;
+  if (updates.email !== undefined) dbUpdates.email = updates.email;
+  if (updates.address !== undefined) dbUpdates.address = updates.address;
+  if (updates.diagnoses !== undefined) dbUpdates.diagnoses = updates.diagnoses;
+  if (updates.medications !== undefined) dbUpdates.medications = updates.medications;
+  if (updates.allergies !== undefined) dbUpdates.allergies = updates.allergies;
+  if (updates.emergencyContact !== undefined) dbUpdates.emergency_contact = updates.emergencyContact;
+  if (updates.emergencyPhone !== undefined) dbUpdates.emergency_phone = updates.emergencyPhone;
+  if (updates.insuranceProvider !== undefined) dbUpdates.insurance_provider = updates.insuranceProvider;
+  if (updates.insuranceId !== undefined) dbUpdates.insurance_id = updates.insuranceId;
+  if (updates.medicalRecordNumber !== undefined) dbUpdates.medical_record_number = updates.medicalRecordNumber;
+  if (updates.notes !== undefined) dbUpdates.notes = updates.notes;
+  if (updates.isActive !== undefined) dbUpdates.is_active = updates.isActive;
+
+  const { data, error } = await supabase
+    .from('patients')
+    .update(dbUpdates)
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error updating patient:', error);
+    throw error;
+  }
+
+  return data;
+}
+
+export async function deletePatient(id: string): Promise<boolean> {
+  if (!isSupabaseConfigured()) {
+    console.warn('Supabase not configured');
+    return false;
+  }
+
+  try {
+    // Soft delete - mark as inactive
+    const { error } = await supabase
+      .from('patients')
+      .update({ is_active: false, updated_at: new Date().toISOString() })
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error deleting patient:', error);
+      throw error;
+    }
+
+    return true;
+  } catch (err) {
+    console.error('Error deleting patient:', err);
+    throw err;
+  }
+}
+
+export async function searchPatients(userId: string, query: string): Promise<Patient[]> {
+  if (!isSupabaseConfigured()) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from('patients')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('is_active', true)
+    .or(`name.ilike.%${query}%,email.ilike.%${query}%,phone.ilike.%${query}%`)
+    .order('name', { ascending: true });
+
+  if (error) {
+    console.error('Error searching patients:', error);
+    throw error;
+  }
+
+  return data || [];
+}
+
+// ============================================
+// Visit Operations
+// ============================================
+
+export async function createVisit(visitData: Omit<NewVisit, 'id' | 'createdAt' | 'updatedAt'>): Promise<Visit | null> {
+  if (!isSupabaseConfigured()) {
+    console.warn('Supabase not configured');
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from('visits')
+    .insert({
+      patient_id: visitData.patientId,
+      user_id: visitData.userId,
+      note_id: visitData.noteId,
+      visit_date: visitData.visitDate || new Date().toISOString(),
+      visit_type: visitData.visitType || 'routine',
+      chief_complaint: visitData.chiefComplaint,
+      vitals: visitData.vitals || {},
+      summary: visitData.summary,
+      diagnosis: visitData.diagnosis,
+      treatment_plan: visitData.treatmentPlan,
+      follow_up_date: visitData.followUpDate,
+      duration: visitData.duration || 0,
+      status: visitData.status || 'completed',
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error creating visit:', error);
+    throw error;
+  }
+
+  return data;
+}
+
+export async function getVisitById(id: string): Promise<Visit | null> {
+  if (!isSupabaseConfigured()) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from('visits')
+    .select('*')
+    .eq('id', id)
+    .single();
+
+  if (error && error.code !== 'PGRST116') {
+    console.error('Error fetching visit:', error);
+    throw error;
+  }
+
+  return data;
+}
+
+export async function getVisitsByPatientId(patientId: string): Promise<Visit[]> {
+  if (!isSupabaseConfigured()) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from('visits')
+    .select('*')
+    .eq('patient_id', patientId)
+    .order('visit_date', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching visits:', error);
+    throw error;
+  }
+
+  return data || [];
+}
+
+export async function getVisitsByUserId(userId: string): Promise<Visit[]> {
+  if (!isSupabaseConfigured()) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from('visits')
+    .select('*')
+    .eq('user_id', userId)
+    .order('visit_date', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching visits:', error);
+    throw error;
+  }
+
+  return data || [];
+}
+
+export async function updateVisit(id: string, updates: Partial<Visit>): Promise<Visit | null> {
+  if (!isSupabaseConfigured()) {
+    return null;
+  }
+
+  const dbUpdates: Record<string, unknown> = {
+    updated_at: new Date().toISOString(),
+  };
+
+  if (updates.noteId !== undefined) dbUpdates.note_id = updates.noteId;
+  if (updates.visitDate !== undefined) dbUpdates.visit_date = updates.visitDate;
+  if (updates.visitType !== undefined) dbUpdates.visit_type = updates.visitType;
+  if (updates.chiefComplaint !== undefined) dbUpdates.chief_complaint = updates.chiefComplaint;
+  if (updates.vitals !== undefined) dbUpdates.vitals = updates.vitals;
+  if (updates.summary !== undefined) dbUpdates.summary = updates.summary;
+  if (updates.diagnosis !== undefined) dbUpdates.diagnosis = updates.diagnosis;
+  if (updates.treatmentPlan !== undefined) dbUpdates.treatment_plan = updates.treatmentPlan;
+  if (updates.followUpDate !== undefined) dbUpdates.follow_up_date = updates.followUpDate;
+  if (updates.duration !== undefined) dbUpdates.duration = updates.duration;
+  if (updates.status !== undefined) dbUpdates.status = updates.status;
+
+  const { data, error } = await supabase
+    .from('visits')
+    .update(dbUpdates)
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error updating visit:', error);
+    throw error;
+  }
+
+  return data;
+}
+
+export async function deleteVisit(id: string): Promise<boolean> {
+  if (!isSupabaseConfigured()) {
+    console.warn('Supabase not configured');
+    return false;
+  }
+
+  try {
+    const { error } = await supabase
+      .from('visits')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error deleting visit:', error);
+      throw error;
+    }
+
+    return true;
+  } catch (err) {
+    console.error('Error deleting visit:', err);
+    throw err;
+  }
+}
+
+export async function getVisitsWithNotes(patientId: string): Promise<(Visit & { note?: Note })[]> {
+  if (!isSupabaseConfigured()) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from('visits')
+    .select(`
+      *,
+      notes (*)
+    `)
+    .eq('patient_id', patientId)
+    .order('visit_date', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching visits with notes:', error);
+    throw error;
+  }
+
+  return data || [];
+}
+
+// Helper function to convert DB patient to app format
+export function dbPatientToAppPatient(dbPatient: any): {
+  id: string;
+  name: string;
+  age: number;
+  gender: 'M' | 'F' | 'O';
+  diagnoses: string[];
+  medications: string[];
+  allergies: string[];
+  lastVisit?: string;
+  phone?: string;
+  email?: string;
+  dateOfBirth?: string;
+  address?: string;
+  emergencyContact?: string;
+  emergencyPhone?: string;
+  insuranceProvider?: string;
+  insuranceId?: string;
+  medicalRecordNumber?: string;
+  notes?: string;
+} {
+  return {
+    id: dbPatient.id,
+    name: dbPatient.name,
+    age: dbPatient.age || 0,
+    gender: dbPatient.gender || 'O',
+    diagnoses: dbPatient.diagnoses || [],
+    medications: dbPatient.medications || [],
+    allergies: dbPatient.allergies || [],
+    lastVisit: dbPatient.updated_at,
+    phone: dbPatient.phone,
+    email: dbPatient.email,
+    dateOfBirth: dbPatient.date_of_birth,
+    address: dbPatient.address,
+    emergencyContact: dbPatient.emergency_contact,
+    emergencyPhone: dbPatient.emergency_phone,
+    insuranceProvider: dbPatient.insurance_provider,
+    insuranceId: dbPatient.insurance_id,
+    medicalRecordNumber: dbPatient.medical_record_number,
+    notes: dbPatient.notes,
+  };
+}
+
+// Helper function to convert DB visit to app format
+export function dbVisitToAppVisit(dbVisit: any): {
+  id: string;
+  patientId: string;
+  noteId?: string;
+  date: string;
+  visitType: string;
+  complaint: string;
+  vitals: any;
+  summary: string;
+  diagnosis?: string;
+  treatmentPlan?: string;
+  followUpDate?: string;
+  duration: number;
+  status: string;
+} {
+  return {
+    id: dbVisit.id,
+    patientId: dbVisit.patient_id,
+    noteId: dbVisit.note_id,
+    date: dbVisit.visit_date,
+    visitType: dbVisit.visit_type || 'routine',
+    complaint: dbVisit.chief_complaint || '',
+    vitals: dbVisit.vitals || {},
+    summary: dbVisit.summary || '',
+    diagnosis: dbVisit.diagnosis,
+    treatmentPlan: dbVisit.treatment_plan,
+    followUpDate: dbVisit.follow_up_date,
+    duration: dbVisit.duration || 0,
+    status: dbVisit.status || 'completed',
+  };
 }
