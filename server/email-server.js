@@ -3,9 +3,12 @@ import cors from 'cors';
 import nodemailer from 'nodemailer';
 import dotenv from 'dotenv';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
-// Load environment variables from project .env
-dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+// Load .env file for local development
+// For production (Render), environment variables are set directly in the dashboard
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 const app = express();
 app.use(cors());
