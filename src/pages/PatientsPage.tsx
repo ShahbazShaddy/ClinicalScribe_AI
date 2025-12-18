@@ -86,11 +86,19 @@ export default function PatientsPage({ user, onNavigate, onViewPatient, onStartR
       const patientsWithVisits = await Promise.all(
         dbPatients.map(async (p) => {
           const patient = dbPatientToAppPatient(p);
-          const visits = await getVisitsByPatientId(p.id);
-          if (visits.length > 0) {
-            patient.lastVisit = new Date(visits[0].visitDate).toISOString().split('T')[0];
+          try {
+            const visits = await getVisitsByPatientId(p.id);
+            if (visits.length > 0 && visits[0].visitDate) {
+              const visitDate = new Date(visits[0].visitDate);
+              if (!isNaN(visitDate.getTime())) {
+                patient.lastVisit = visitDate.toISOString().split('T')[0];
+              }
+            }
+            return { ...patient, visitCount: visits.length };
+          } catch (err) {
+            console.warn(`Error loading visits for patient ${p.id}:`, err);
+            return { ...patient, visitCount: 0 };
           }
-          return { ...patient, visitCount: visits.length };
         })
       );
       
