@@ -11,7 +11,7 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '1mb' }));
 
-const PORT = process.env.EMAIL_SERVER_PORT || 8787;
+const PORT = process.env.PORT || process.env.EMAIL_SERVER_PORT || 8787;
 
 function ensureSmtpConfig() {
   const required = [
