@@ -5,6 +5,7 @@ import {
   generateClinicalNoteSummary,
   extractClinicalInformation,
   generateStructuredNote,
+  extractPatientInfo,
   Message,
 } from '@/services/textGeneration';
 import {
@@ -26,14 +27,8 @@ export interface ClinicalExtraction {
   followUpInstructions: string;
 }
 
-export interface StructuredNoteContent {
-  subjective: string;
-  objective: string;
-  assessment: string;
-  plan: string;
-  icd10: string;
-  cpt: string;
-}
+// Dynamic note content - supports any section keys
+export type StructuredNoteContent = Record<string, string>;
 
 /**
  * Custom hook for AI services including text generation, speech-to-text, and text-to-speech
@@ -129,13 +124,31 @@ export function useAI() {
     }
   }, []);
 
-  const generateStructuredNoteContent = useCallback(
-    async (transcribedText: string, noteType: 'SOAP' | 'Progress' | 'Consultation' | 'H&P' = 'SOAP') => {
+  const extractPatientInfoFromAudio = useCallback(
+    async (transcribedText: string): Promise<{ name?: string; age?: string; chiefComplaint?: string }> => {
       setIsGenerating(true);
       setError(null);
       try {
-        const noteContent = await generateStructuredNote(transcribedText, noteType);
-        return noteContent as StructuredNoteContent;
+        const patientInfo = await extractPatientInfo(transcribedText);
+        return patientInfo;
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'Error extracting patient info';
+        setError(errorMessage);
+        throw err;
+      } finally {
+        setIsGenerating(false);
+      }
+    },
+    []
+  );
+
+  const generateStructuredNoteContent = useCallback(
+    async (transcribedText: string): Promise<Record<string, string>> => {
+      setIsGenerating(true);
+      setError(null);
+      try {
+        const noteContent = await generateStructuredNote(transcribedText);
+        return noteContent; // Returns dynamic sections based on content
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Error generating structured note';
         setError(errorMessage);
@@ -239,6 +252,7 @@ export function useAI() {
     generateStreamingText,
     generateClinicalSummary,
     extractClinicalData,
+    extractPatientInfoFromAudio,
     generateStructuredNoteContent,
 
     // Speech-to-Text

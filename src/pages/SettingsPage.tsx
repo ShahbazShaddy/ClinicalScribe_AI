@@ -92,10 +92,10 @@ export default function SettingsPage({ user, onNavigate, onLogout }: SettingsPag
 
   return (
     <DashboardLayout user={user} currentPage="settings" onNavigate={onNavigate} onLogout={onLogout}>
-      <div className="max-w-4xl mx-auto space-y-6 animate-fade-in">
+      <div className="max-w-4xl mx-auto space-y-4 sm:space-y-6 animate-fade-in">
         <div>
-          <h1 className="text-3xl font-bold mb-2">Settings</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl sm:text-3xl font-bold mb-1 sm:mb-2">Settings</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground">
             Manage your account and preferences
           </p>
         </div>
@@ -105,42 +105,44 @@ export default function SettingsPage({ user, onNavigate, onLogout }: SettingsPag
           <CardHeader>
             <div className="flex items-center gap-2">
               <UserIcon className="w-5 h-5 text-primary" />
-              <CardTitle>Profile Information</CardTitle>
+              <CardTitle className="text-lg sm:text-xl">Profile Information</CardTitle>
             </div>
-            <CardDescription>
+            <CardDescription className="text-xs sm:text-sm">
               Update your personal and practice information
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid md:grid-cols-2 gap-4">
+          <CardContent className="space-y-3 sm:space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
               <div className="space-y-2">
-                <Label htmlFor="name">Full Name</Label>
+                <Label htmlFor="name" className="text-xs sm:text-sm">Full Name</Label>
                 <Input
                   id="name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
+                  className="text-xs sm:text-sm"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email" className="text-xs sm:text-sm">Email</Label>
                 <Input
                   id="email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  className="text-xs sm:text-sm"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="specialty">Medical Specialty</Label>
+                <Label htmlFor="specialty" className="text-xs sm:text-sm">Medical Specialty</Label>
                 <Select value={specialty} onValueChange={setSpecialty}>
-                  <SelectTrigger>
+                  <SelectTrigger className="text-xs sm:text-sm">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     {SPECIALTIES.map((spec) => (
-                      <SelectItem key={spec} value={spec}>
+                      <SelectItem key={spec} value={spec} className="text-xs sm:text-sm">
                         {spec}
                       </SelectItem>
                     ))}
@@ -149,16 +151,17 @@ export default function SettingsPage({ user, onNavigate, onLogout }: SettingsPag
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="practice">Practice Name</Label>
+                <Label htmlFor="practice" className="text-xs sm:text-sm">Practice Name</Label>
                 <Input
                   id="practice"
                   value={practiceName}
                   onChange={(e) => setPracticeName(e.target.value)}
+                  className="text-xs sm:text-sm"
                 />
               </div>
             </div>
 
-            <Button onClick={handleSaveProfile} disabled={isSaving || isLoading}>
+            <Button onClick={handleSaveProfile} disabled={isSaving || isLoading} size="sm" className="w-full sm:w-auto">
               {isSaving || isLoading ? 'Saving...' : 'Save Changes'}
             </Button>
           </CardContent>
@@ -169,24 +172,24 @@ export default function SettingsPage({ user, onNavigate, onLogout }: SettingsPag
           <CardHeader>
             <div className="flex items-center gap-2">
               <FileText className="w-5 h-5 text-primary" />
-              <CardTitle>Note Preferences</CardTitle>
+              <CardTitle className="text-lg sm:text-xl">Note Preferences</CardTitle>
             </div>
-            <CardDescription>
+            <CardDescription className="text-xs sm:text-sm">
               Customize your default note settings
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-3 sm:space-y-4">
             <div className="space-y-2">
-              <Label>Default Note Type</Label>
+              <Label className="text-xs sm:text-sm">Default Note Type</Label>
               <Select value={defaultNoteType} onValueChange={setDefaultNoteType}>
-                <SelectTrigger>
+                <SelectTrigger className="text-xs sm:text-sm">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="SOAP">SOAP Note</SelectItem>
-                  <SelectItem value="Progress">Progress Note</SelectItem>
-                  <SelectItem value="Consultation">Consultation Note</SelectItem>
-                  <SelectItem value="H&P">H&P (History & Physical)</SelectItem>
+                  <SelectItem value="SOAP" className="text-xs sm:text-sm">SOAP Note</SelectItem>
+                  <SelectItem value="Progress" className="text-xs sm:text-sm">Progress Note</SelectItem>
+                  <SelectItem value="Consultation" className="text-xs sm:text-sm">Consultation Note</SelectItem>
+                  <SelectItem value="H&P" className="text-xs sm:text-sm">H&P (History & Physical)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -194,20 +197,20 @@ export default function SettingsPage({ user, onNavigate, onLogout }: SettingsPag
             <Separator />
 
             <div className="space-y-2">
-              <Label>Audio Quality</Label>
+              <Label className="text-xs sm:text-sm">Audio Quality</Label>
               <Select value={audioQuality} onValueChange={setAudioQuality}>
-                <SelectTrigger>
+                <SelectTrigger className="text-xs sm:text-sm">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="standard">Standard Quality</SelectItem>
-                  <SelectItem value="high">High Quality (Recommended)</SelectItem>
-                  <SelectItem value="ultra">Ultra High Quality</SelectItem>
+                  <SelectItem value="standard" className="text-xs sm:text-sm">Standard Quality</SelectItem>
+                  <SelectItem value="high" className="text-xs sm:text-sm">High Quality (Recommended)</SelectItem>
+                  <SelectItem value="ultra" className="text-xs sm:text-sm">Ultra High Quality</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
-            <Button onClick={handleSavePreferences} disabled={isSaving || isLoading}>
+            <Button onClick={handleSavePreferences} disabled={isSaving || isLoading} size="sm" className="w-full sm:w-auto">
               {isSaving || isLoading ? 'Saving...' : 'Save Preferences'}
             </Button>
           </CardContent>
@@ -218,33 +221,33 @@ export default function SettingsPage({ user, onNavigate, onLogout }: SettingsPag
           <CardHeader>
             <div className="flex items-center gap-2">
               <HardDrive className="w-5 h-5 text-primary" />
-              <CardTitle>Data Management</CardTitle>
+              <CardTitle className="text-lg sm:text-xl">Data Management</CardTitle>
             </div>
-            <CardDescription>
+            <CardDescription className="text-xs sm:text-sm">
               Manage your stored data and retention
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between p-4 border border-border rounded-lg">
-              <div>
-                <h4 className="font-medium mb-1">Clear All Notes</h4>
-                <p className="text-sm text-muted-foreground">
+          <CardContent className="space-y-3 sm:space-y-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 p-3 sm:p-4 border border-border rounded-lg">
+              <div className="flex-1">
+                <h4 className="font-medium mb-1 text-sm sm:text-base">Clear All Notes</h4>
+                <p className="text-xs sm:text-sm text-muted-foreground">
                   Permanently delete all stored clinical notes
                 </p>
               </div>
-              <Button variant="destructive" onClick={handleClearData}>
+              <Button variant="destructive" size="sm" onClick={handleClearData} className="w-full sm:w-auto whitespace-nowrap">
                 Clear Data
               </Button>
             </div>
 
-            <div className="flex items-center justify-between p-4 border border-border rounded-lg">
-              <div>
-                <h4 className="font-medium mb-1">Export All Data</h4>
-                <p className="text-sm text-muted-foreground">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 p-3 sm:p-4 border border-border rounded-lg">
+              <div className="flex-1">
+                <h4 className="font-medium mb-1 text-sm sm:text-base">Export All Data</h4>
+                <p className="text-xs sm:text-sm text-muted-foreground">
                   Download all your notes and data
                 </p>
               </div>
-              <Button variant="outline" onClick={() => toast.success('Exporting data... (Demo)')}>
+              <Button variant="outline" size="sm" onClick={() => toast.success('Exporting data... (Demo)')} className="w-full sm:w-auto whitespace-nowrap">
                 Export
               </Button>
             </div>
@@ -256,27 +259,27 @@ export default function SettingsPage({ user, onNavigate, onLogout }: SettingsPag
           <CardHeader>
             <div className="flex items-center gap-2">
               <Shield className="w-5 h-5 text-primary" />
-              <CardTitle className="text-primary">HIPAA Compliance Information</CardTitle>
+              <CardTitle className="text-primary text-lg sm:text-xl">HIPAA Compliance Information</CardTitle>
             </div>
           </CardHeader>
-          <CardContent className="space-y-3 text-sm">
+          <CardContent className="space-y-2 sm:space-y-3 text-xs sm:text-sm">
             <div className="flex items-start gap-3">
-              <div className="w-2 h-2 rounded-full bg-primary mt-1.5" />
+              <div className="w-2 h-2 rounded-full bg-primary mt-1.5 flex-shrink-0" />
               <p>All audio recordings are encrypted end-to-end using AES-256 encryption</p>
             </div>
             <div className="flex items-start gap-3">
-              <div className="w-2 h-2 rounded-full bg-primary mt-1.5" />
+              <div className="w-2 h-2 rounded-full bg-primary mt-1.5 flex-shrink-0" />
               <p>Clinical notes are stored with bank-level security protocols</p>
             </div>
             <div className="flex items-start gap-3">
-              <div className="w-2 h-2 rounded-full bg-primary mt-1.5" />
+              <div className="w-2 h-2 rounded-full bg-primary mt-1.5 flex-shrink-0" />
               <p>Access logs are maintained for all data access and modifications</p>
             </div>
             <div className="flex items-start gap-3">
-              <div className="w-2 h-2 rounded-full bg-primary mt-1.5" />
+              <div className="w-2 h-2 rounded-full bg-primary mt-1.5 flex-shrink-0" />
               <p>Business Associate Agreement (BAA) available upon request</p>
             </div>
-            <Separator className="my-3" />
+            <Separator className="my-2 sm:my-3" />
             <p className="text-xs text-primary-700">
               <strong>Note:</strong> This is a demonstration application. In production, full HIPAA compliance 
               measures including encrypted storage, audit trails, and secure transmission would be implemented.

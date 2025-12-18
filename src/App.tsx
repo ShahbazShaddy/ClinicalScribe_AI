@@ -8,10 +8,11 @@ import NotePage from '@/pages/NotePage';
 import PastNotesPage from '@/pages/PastNotesPage';
 import SettingsPage from '@/pages/SettingsPage';
 import ChatPage from '@/pages/ChatPage';
-import PrivacyPolicy from '@/pages/PrivacyPolicy';
-import TermsOfService from '@/pages/TermsOfService';
+import PatientsPage from '@/pages/PatientsPage';
+import PatientDetailPage from '@/pages/PatientDetailPage';
+import type { StructuredData } from '@/types/structuredData';
 
-export type Page = 'landing' | 'auth' | 'dashboard' | 'recording' | 'note' | 'past-notes' | 'settings' | 'chat' | 'privacy' | 'terms';
+export type Page = 'landing' | 'auth' | 'dashboard' | 'recording' | 'note' | 'past-notes' | 'settings' | 'chat' | 'patients' | 'patient' | 'patient-recording';
 
 export interface User {
   id?: string;
@@ -23,19 +24,81 @@ export interface User {
 
 export interface Note {
   id: string;
+  patientId?: string;
   patientName: string;
   patientAge?: string;
   chiefComplaint?: string;
-  noteType: 'SOAP' | 'Progress' | 'Consultation' | 'H&P';
+  noteType: 'SOAP' | 'Progress' | 'Consultation' | 'H&P' | 'Flexible'; // Flexible for dynamic content
   date: string;
   duration: number;
-  content: {
-    subjective?: string;
-    objective?: string;
-    assessment?: string;
-    plan?: string;
-    icd10?: string;
-    cpt?: string;
+  content: Record<string, string>; // Dynamic key-value pairs for flexible sections
+  transcription?: string; // Original voice transcription
+  structuredData?: StructuredData; // Extracted vitals, clinical info, symptoms
+  previousVisitData?: StructuredData; // For trend comparison
+}
+
+export interface Patient {
+  id: string;
+  name: string;
+  age: number;
+  gender: 'M' | 'F' | 'O';
+  dateOfBirth?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  diagnoses: string[];
+  medications: string[];
+  allergies?: string[];
+  emergencyContact?: string;
+  emergencyPhone?: string;
+  insuranceProvider?: string;
+  insuranceId?: string;
+  medicalRecordNumber?: string;
+  notes?: string;
+  lastVisit?: string;
+  visits?: Visit[];
+  // Risk assessment fields
+  riskLevel?: 'low' | 'moderate' | 'medium' | 'high' | 'critical';
+  riskScore?: number;
+  riskFactors?: string[];
+  riskAssessedAt?: string;
+  riskNotes?: string;
+}
+
+export interface Visit {
+  id: string;
+  patientId: string;
+  noteId?: string;
+  date: string;
+  visitType: string;
+  complaint: string;
+  vitals: {
+    bp?: string;
+    weight?: number;
+    height?: number;
+    temperature?: number;
+    heartRate?: number;
+    respiratoryRate?: number;
+    oxygenSaturation?: number;
+  };
+  summary: string;
+  diagnosis?: string;
+  treatmentPlan?: string;
+  followUpDate?: string;
+  duration: number;
+  status: string;
+  // Risk assessment fields
+  riskLevel?: 'low' | 'medium' | 'high';
+  riskScore?: number;
+  riskFactors?: string[];
+  aiRiskAssessment?: {
+    riskLevel: string;
+    riskScore: number;
+    riskFactors: string[];
+    summary: string;
+    concerns: string[];
+    recommendations: string[];
+    followUpUrgency: string;
   };
 }
 
@@ -43,6 +106,8 @@ function App() {
   const [currentPage, setCurrentPage] = useState<Page>('landing');
   const [user, setUser] = useState<User | null>(null);
   const [currentNote, setCurrentNote] = useState<Note | null>(null);
+  const [currentPatient, setCurrentPatient] = useState<Patient | null>(null);
+  const [recordingForPatient, setRecordingForPatient] = useState<Patient | null>(null);
 
   useEffect(() => {
     const savedUser = localStorage.getItem('clinicalscribe_user');
@@ -70,7 +135,29 @@ function App() {
 
   const handleNoteCreated = (note: Note) => {
     setCurrentNote(note);
-    navigateTo('note');
+    // If recording was for a specific patient, navigate back to patient detail
+    if (recordingForPatient) {
+      setCurrentPatient(recordingForPatient);
+      setRecordingForPatient(null);
+      navigateTo('patient');
+    } else {
+      navigateTo('note');
+    }
+  };
+
+  const handlePatientSelect = (patient: Patient) => {
+    setCurrentPatient(patient);
+    navigateTo('patient');
+  };
+
+  const handleStartRecordingForPatient = (patient: Patient) => {
+    setRecordingForPatient(patient);
+    navigateTo('patient-recording');
+  };
+
+  const handlePatientAdded = (patient: Patient) => {
+    setCurrentPatient(patient);
+    navigateTo('patient');
   };
 
   return (
@@ -126,11 +213,38 @@ function App() {
       {currentPage === 'chat' && user && (
         <ChatPage user={user} onNavigate={navigateTo} onLogout={handleLogout} />
       )}
-      {currentPage === 'privacy' && (
-        <PrivacyPolicy onNavigate={() => navigateTo('landing')} />
+      {currentPage === 'patients' && user && (
+        <PatientsPage 
+          user={user} 
+          onNavigate={navigateTo} 
+          onViewPatient={handlePatientSelect} 
+          onStartRecording={handleStartRecordingForPatient}
+          onPatientAdded={handlePatientAdded}
+          onLogout={handleLogout} 
+        />
       )}
-      {currentPage === 'terms' && (
-        <TermsOfService onNavigate={() => navigateTo('landing')} />
+      {currentPage === 'patient' && user && currentPatient && (
+        <PatientDetailPage 
+          user={user} 
+          patient={currentPatient} 
+          onNavigate={navigateTo} 
+          onStartRecording={handleStartRecordingForPatient}
+          onViewNote={(note) => {
+            setCurrentNote(note);
+            navigateTo('note');
+          }}
+          onPatientUpdated={(updatedPatient) => setCurrentPatient(updatedPatient)}
+          onLogout={handleLogout} 
+        />
+      )}
+      {currentPage === 'patient-recording' && user && recordingForPatient && (
+        <RecordingPage 
+          user={user} 
+          patient={recordingForPatient}
+          onNavigate={navigateTo} 
+          onLogout={handleLogout}
+          onNoteCreated={handleNoteCreated}
+        />
       )}
       <Toaster />
     </>
