@@ -8,15 +8,54 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import DashboardLayout from '@/components/layout/DashboardLayout';
-import { Plus, Search, Mic, Eye, Loader2, UserPlus, MessageSquare, BarChart3, Shield, AlertTriangle, Mail } from 'lucide-react';
+import { Plus, Search, Mic, Eye, Loader2, UserPlus, MessageSquare, BarChart3, Shield, AlertTriangle, Mail, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { createPatient, getPatientsByUserId, dbPatientToAppPatient, getVisitsByPatientId } from '@/db/services';
+import { createPatient, getPatientsByUserId, dbPatientToAppPatient, getVisitsByPatientId, deletePatient } from '@/db/services';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { isSupabaseConfigured } from '@/db/client';
 import { PatientChatModal } from '@/components/PatientChatModal';
 import { PatientAnalysisModal } from '@/components/PatientAnalysisModal';
 import { RiskLevelEditor } from '@/components/RiskLevelEditor';
 import { PatientEmailComposer } from '@/components/PatientEmailComposer';
 import { getRiskLevelColor } from '@/services/riskAssessment';
+
+// Helper function to format dates in a human-readable format
+const formatDate = (dateString: string | undefined): string => {
+  if (!dateString) return 'No visits yet';
+  
+  try {
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return 'No visits yet';
+    
+    const now = new Date();
+    const diffTime = now.getTime() - date.getTime();
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    
+    // If today
+    if (diffDays === 0) {
+      return 'Today';
+    }
+    
+    // If yesterday
+    if (diffDays === 1) {
+      return 'Yesterday';
+    }
+    
+    // If within last 7 days
+    if (diffDays < 7) {
+      return `${diffDays} days ago`;
+    }
+    
+    // Otherwise, show formatted date
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
+    });
+  } catch {
+    return 'No visits yet';
+  }
+};
 
 interface PatientsPageProps {
   user: User;
@@ -77,6 +116,8 @@ export default function PatientsPage({ user, onNavigate, onViewPatient, onStartR
   const [analysisPatient, setAnalysisPatient] = useState<Patient | null>(null);
   const [riskEditPatient, setRiskEditPatient] = useState<Patient | null>(null);
   const [emailPatient, setEmailPatient] = useState<Patient | null>(null);
+  const [deletePatientData, setDeletePatientData] = useState<Patient | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Load patients from database
   useEffect(() => {
@@ -191,6 +232,27 @@ export default function PatientsPage({ user, onNavigate, onViewPatient, onStartR
       toast.error('Failed to add patient');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleDeletePatient = async () => {
+    if (!deletePatientData) return;
+
+    setIsDeleting(true);
+    try {
+      const success = await deletePatient(deletePatientData.id);
+      if (success) {
+        setPatients(patients.filter(p => p.id !== deletePatientData.id));
+        toast.success(`${deletePatientData.name} has been removed from your patient list`);
+        setDeletePatientData(null);
+      } else {
+        toast.error('Failed to delete patient');
+      }
+    } catch (error) {
+      console.error('Error deleting patient:', error);
+      toast.error('Failed to delete patient');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -522,7 +584,7 @@ export default function PatientsPage({ user, onNavigate, onViewPatient, onStartR
                         </Badge>
                       </td>
                       <td className="hidden lg:table-cell px-3 py-3 sm:px-4">
-                        {p.lastVisit || 'No visits yet'}
+                        {formatDate(p.lastVisit)}
                       </td>
                       <td className="px-3 py-3 sm:px-4">
                         <div className="flex items-center justify-end gap-1 sm:gap-2">
@@ -571,6 +633,15 @@ export default function PatientsPage({ user, onNavigate, onViewPatient, onStartR
                           >
                             <Mic className="h-4 w-4 sm:mr-1" />
                             <span className="hidden sm:inline">Record</span>
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => setDeletePatientData(p)}
+                            title="Delete Patient"
+                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                          >
+                            <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
                       </td>
@@ -635,6 +706,40 @@ export default function PatientsPage({ user, onNavigate, onViewPatient, onStartR
             doctorName={user.name}
           />
         )}
+
+        {/* Delete Patient Confirmation Dialog */}
+        <AlertDialog open={!!deletePatientData} onOpenChange={(open) => !open && setDeletePatientData(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Patient</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete <strong>{deletePatientData?.name}</strong>? 
+                This will remove the patient from your active patient list. 
+                The patient's visit history and records will be preserved but marked as inactive.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleDeletePatient}
+                disabled={isDeleting}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete Patient
+                  </>
+                )}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </DashboardLayout>
   );
