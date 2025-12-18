@@ -1,12 +1,17 @@
 import { useState, useRef, useEffect } from 'react';
-import { Mic, Square, Loader2, AlertCircle, User as UserIcon, ArrowLeft } from 'lucide-react';
+import { Mic, Square, Loader2, AlertCircle, User as UserIcon, ArrowLeft, Search, Plus, UserPlus, Users } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import AlertsPanel from '@/components/AlertsPanel';
 import AlertSummaryPanel from '@/components/AlertSummaryPanel';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
 import { generateUniqueId } from '@/lib/utils';
 import { useDatabase } from '@/hooks/useDatabase';
@@ -14,7 +19,7 @@ import type { User, Page, Note, Patient } from '@/App';
 import { useAI } from '@/hooks/useAI';
 import type { Alert as AlertType } from '@/types/alerts';
 import { generateSimulatedAlerts } from '@/lib/alertDefinitions';
-import { createVisit, updateVisitRiskAssessment, updatePatientRiskLevel, createPatientRiskHistoryEntry, getPatientVisits } from '@/db/services';
+import { createVisit, updateVisitRiskAssessment, updatePatientRiskLevel, createPatientRiskHistoryEntry, getPatientVisits, getPatientsByUserId, createPatient, dbPatientToAppPatient } from '@/db/services';
 import { analyzeVisitRisk } from '@/services/riskAssessment';
 
 interface RecordingPageProps {
@@ -25,7 +30,23 @@ interface RecordingPageProps {
   onNoteCreated: (note: Note) => void;
 }
 
-export default function RecordingPage({ user, patient, onNavigate, onLogout, onNoteCreated }: RecordingPageProps) {
+export default function RecordingPage({ user, patient: initialPatient, onNavigate, onLogout, onNoteCreated }: RecordingPageProps) {
+  // Patient selection state
+  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(initialPatient || null);
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [patientSearchQuery, setPatientSearchQuery] = useState('');
+  const [isLoadingPatients, setIsLoadingPatients] = useState(false);
+  const [showNewPatientDialog, setShowNewPatientDialog] = useState(false);
+  const [newPatientForm, setNewPatientForm] = useState({
+    name: '',
+    age: '',
+    gender: 'M' as 'M' | 'F' | 'O',
+    phone: '',
+    email: '',
+  });
+  const [isCreatingPatient, setIsCreatingPatient] = useState(false);
+
+  // Recording state
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
@@ -50,6 +71,70 @@ export default function RecordingPage({ user, patient, onNavigate, onLogout, onN
   } = useAI();
 
   const { saveNote } = useDatabase();
+
+  // Load patients on mount
+  useEffect(() => {
+    const loadPatients = async () => {
+      if (!user.id) return;
+      setIsLoadingPatients(true);
+      try {
+        const dbPatients = await getPatientsByUserId(user.id);
+        const appPatients = dbPatients.map(dbPatientToAppPatient);
+        setPatients(appPatients);
+      } catch (err) {
+        console.error('Error loading patients:', err);
+      } finally {
+        setIsLoadingPatients(false);
+      }
+    };
+    loadPatients();
+  }, [user.id]);
+
+  // Filter patients based on search
+  const filteredPatients = patients.filter(p =>
+    p.name.toLowerCase().includes(patientSearchQuery.toLowerCase()) ||
+    p.phone?.includes(patientSearchQuery) ||
+    p.email?.toLowerCase().includes(patientSearchQuery.toLowerCase())
+  );
+
+  // Handle new patient creation
+  const handleCreatePatient = async () => {
+    if (!newPatientForm.name.trim()) {
+      toast.error('Patient name is required');
+      return;
+    }
+
+    setIsCreatingPatient(true);
+    try {
+      const newPatient = await createPatient({
+        userId: user.id,
+        name: newPatientForm.name.trim(),
+        age: newPatientForm.age ? parseInt(newPatientForm.age) : undefined,
+        gender: newPatientForm.gender,
+        phone: newPatientForm.phone || undefined,
+        email: newPatientForm.email || undefined,
+        diagnoses: [],
+        medications: [],
+      });
+
+      if (newPatient) {
+        const appPatient = dbPatientToAppPatient(newPatient);
+        setPatients([appPatient, ...patients]);
+        setSelectedPatient(appPatient);
+        setShowNewPatientDialog(false);
+        setNewPatientForm({ name: '', age: '', gender: 'M', phone: '', email: '' });
+        toast.success(`Patient "${appPatient.name}" created successfully`);
+      }
+    } catch (err) {
+      console.error('Error creating patient:', err);
+      toast.error('Failed to create patient');
+    } finally {
+      setIsCreatingPatient(false);
+    }
+  };
+
+  // Use selectedPatient instead of patient prop
+  const patient = selectedPatient;
 
   useEffect(() => {
     return () => {
@@ -346,10 +431,110 @@ export default function RecordingPage({ user, patient, onNavigate, onLogout, onN
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 sm:gap-6 animate-fade-in">
         {/* Main Content - Recording Interface */}
         <div className="lg:col-span-3 space-y-6 sm:space-y-8">
-          {/* Patient Context Header */}
+          {/* Patient Selection Section - Show when no patient is selected */}
+          {!patient && (
+            <Card className="border-2 border-dashed border-muted-foreground/30">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Users className="h-5 w-5" />
+                  Select Patient Before Recording
+                </CardTitle>
+                <CardDescription>
+                  A patient must be linked before starting a recording. Select an existing patient or create a new one.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Search existing patients */}
+                <div className="space-y-2">
+                  <Label>Search Existing Patients</Label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search by name, phone, or email..."
+                      value={patientSearchQuery}
+                      onChange={(e) => setPatientSearchQuery(e.target.value)}
+                      className="pl-9"
+                    />
+                  </div>
+                </div>
+
+                {/* Patient list */}
+                {isLoadingPatients ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                    <span className="ml-2 text-muted-foreground">Loading patients...</span>
+                  </div>
+                ) : filteredPatients.length > 0 ? (
+                  <ScrollArea className="h-[280px] rounded-md border">
+                    <div className="p-2 space-y-1">
+                      {filteredPatients.map((p) => (
+                        <button
+                          key={p.id}
+                          onClick={() => setSelectedPatient(p)}
+                          className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-accent transition-colors text-left"
+                        >
+                          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                            <UserIcon className="h-5 w-5 text-primary" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium truncate">{p.name}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {p.age && `${p.age} yrs`}
+                              {p.age && p.gender && ' • '}
+                              {p.gender && (p.gender === 'M' ? 'Male' : p.gender === 'F' ? 'Female' : 'Other')}
+                              {(p.phone || p.email) && ' • '}
+                              {p.phone || p.email}
+                            </div>
+                          </div>
+                          {p.riskLevel && (
+                            <Badge 
+                              variant={p.riskLevel === 'high' ? 'destructive' : p.riskLevel === 'medium' ? 'secondary' : 'outline'}
+                              className="flex-shrink-0"
+                            >
+                              {p.riskLevel}
+                            </Badge>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                ) : patients.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Users className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                    <p>No patients found</p>
+                    <p className="text-sm">Create a new patient to start recording</p>
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Search className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                    <p>No patients match your search</p>
+                    <p className="text-sm">Try a different search term or create a new patient</p>
+                  </div>
+                )}
+
+                {/* Create new patient button */}
+                <div className="flex items-center gap-2 pt-2">
+                  <div className="flex-1 h-px bg-border" />
+                  <span className="text-xs text-muted-foreground">OR</span>
+                  <div className="flex-1 h-px bg-border" />
+                </div>
+
+                <Button 
+                  variant="outline" 
+                  className="w-full" 
+                  onClick={() => setShowNewPatientDialog(true)}
+                >
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  Create New Patient
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Patient Context Header - Show when patient is selected */}
           {patient && (
             <div className="flex items-center gap-4">
-              <Button variant="ghost" size="icon" onClick={() => onNavigate('patient')}>
+              <Button variant="ghost" size="icon" onClick={() => initialPatient ? onNavigate('patient') : setSelectedPatient(null)} title={initialPatient ? 'Back to patient' : 'Change patient'}>
                 <ArrowLeft className="h-5 w-5" />
               </Button>
               <Card className="flex-1">
@@ -376,6 +561,11 @@ export default function RecordingPage({ user, patient, onNavigate, onLogout, onN
                         )}
                       </div>
                     )}
+                    {!initialPatient && (
+                      <Button variant="ghost" size="sm" onClick={() => setSelectedPatient(null)}>
+                        Change
+                      </Button>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -384,10 +574,13 @@ export default function RecordingPage({ user, patient, onNavigate, onLogout, onN
 
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold mb-1 sm:mb-2">
-              {patient ? `New Visit for ${patient.name}` : 'Create New Clinical Note'}
+              {patient ? `New Visit for ${patient.name}` : 'New Recording'}
             </h1>
             <p className="text-xs sm:text-sm text-muted-foreground">
-              Record patient conversation and generate structured documentation using AI
+              {patient 
+                ? 'Record patient conversation and generate structured documentation using AI'
+                : 'Select or create a patient to begin recording'
+              }
             </p>
           </div>
 
@@ -399,80 +592,87 @@ export default function RecordingPage({ user, patient, onNavigate, onLogout, onN
             </Alert>
           )}
 
-          {/* Recording Interface */}
-          <Card className="border-2 border-primary">
-            <CardContent className="p-6 sm:p-12 flex flex-col items-center justify-center">
-              {!isRecording && !isProcessing && (
-                <>
-                  <Button
-                    size="lg"
-                    onClick={startRecording}
-                    className="w-24 sm:w-32 h-24 sm:h-32 rounded-full medical-gradient hover:opacity-90 transition-opacity"
-                  >
-                    <Mic className="w-8 sm:w-12 h-8 sm:h-12" />
-                  </Button>
-                  <p className="text-base sm:text-lg font-medium mt-4 sm:mt-6">Click to Start Recording</p>
-                  <p className="text-xs sm:text-sm text-muted-foreground mt-2">
-                    Record your patient conversation
-                  </p>
-                </>
-              )}
+          {/* Recording Interface - Only show when patient is selected */}
+          {patient && (
+            <Card className="border-2 border-primary">
+              <CardContent className="p-6 sm:p-12 flex flex-col items-center justify-center">
+                {!isRecording && !isProcessing && (
+                  <>
+                    <Button
+                      size="lg"
+                      onClick={startRecording}
+                      className="w-24 sm:w-32 h-24 sm:h-32 rounded-full medical-gradient hover:opacity-90 transition-opacity"
+                    >
+                      <Mic className="w-8 sm:w-12 h-8 sm:h-12" />
+                    </Button>
+                    <p className="text-base sm:text-lg font-medium mt-4 sm:mt-6">Click to Start Recording</p>
+                    <p className="text-xs sm:text-sm text-muted-foreground mt-2">
+                      Record your patient conversation
+                    </p>
+                  </>
+                )}
 
-              {isRecording && (
-                <>
-                  <div className="relative mb-6 sm:mb-8">
-                    <div className="w-24 sm:w-32 h-24 sm:h-32 rounded-full bg-destructive flex items-center justify-center recording-pulse">
-                      <Mic className="w-8 sm:w-12 h-8 sm:h-12 text-destructive-foreground" />
+                {isRecording && (
+                  <>
+                    <div className="relative mb-6 sm:mb-8">
+                      <div className="w-24 sm:w-32 h-24 sm:h-32 rounded-full bg-destructive flex items-center justify-center recording-pulse">
+                        <Mic className="w-8 sm:w-12 h-8 sm:h-12 text-destructive-foreground" />
+                      </div>
                     </div>
-                  </div>
 
-                  {/* Waveform Visualization */}
-                  <div className="flex items-center gap-0.5 sm:gap-1 h-12 sm:h-16 mb-4 sm:mb-6">
-                    {Array.from({ length: 20 }).map((_, i) => (
-                      <div
-                        key={i}
-                        className="w-0.5 sm:w-1 bg-primary rounded-full animate-pulse-wave"
-                        style={{
-                          height: `${Math.random() * 100}%`,
-                          animationDelay: `${i * 0.1}s`
-                        }}
-                      />
-                    ))}
-                  </div>
+                    {/* Waveform Visualization */}
+                    <div className="flex items-center gap-0.5 sm:gap-1 h-12 sm:h-16 mb-4 sm:mb-6">
+                      {Array.from({ length: 20 }).map((_, i) => (
+                        <div
+                          key={i}
+                          className="w-0.5 sm:w-1 bg-primary rounded-full animate-pulse-wave"
+                          style={{
+                            height: `${Math.random() * 100}%`,
+                            animationDelay: `${i * 0.1}s`
+                          }}
+                        />
+                      ))}
+                    </div>
 
-                  <div className="text-2xl sm:text-4xl font-bold text-destructive mb-3 sm:mb-4">
-                    {formatTime(recordingTime)}
-                  </div>
+                    <div className="text-2xl sm:text-4xl font-bold text-destructive mb-3 sm:mb-4">
+                      {formatTime(recordingTime)}
+                    </div>
 
-                  <Button
-                    size="lg"
-                    variant="destructive"
-                    onClick={stopRecording}
-                    className="px-6 sm:px-8"
-                  >
-                    <Square className="w-5 h-5 mr-2" />
-                    Stop Recording
-                  </Button>
-                </>
-              )}
+                    <Button
+                      size="lg"
+                      variant="destructive"
+                      onClick={stopRecording}
+                      className="gap-2"
+                    >
+                      <Square className="w-4 sm:w-5 h-4 sm:h-5" />
+                      <span className="text-sm sm:text-base">Stop Recording</span>
+                    </Button>
+                  </>
+                )}
 
-              {isProcessing && (
-                <>
-                  <Loader2 className="w-12 sm:w-16 h-12 sm:h-16 text-primary animate-spin mb-4 sm:mb-6" />
-                  <h3 className="text-xl sm:text-2xl font-semibold mb-3 sm:mb-4">Analyzing Recording...</h3>
-                  <div className="space-y-2 text-center">
-                    <p className="text-xs sm:text-sm text-muted-foreground flex items-center justify-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-success"></span>
-                      {processingStep || 'Processing...'}
+                {isProcessing && (
+                  <>
+                    <Loader2 className="w-12 sm:w-16 h-12 sm:h-16 animate-spin text-primary mb-4 sm:mb-6" />
+                    <p className="text-base sm:text-lg font-medium">{processingStep || 'Processing...'}</p>
+                    <p className="text-xs sm:text-sm text-muted-foreground mt-2">
+                      This may take a few moments
                     </p>
-                    <p className="text-xs text-muted-foreground mt-3 sm:mt-4">
-                      Powered by Groq AI
-                    </p>
-                  </div>
-                </>
-              )}
-            </CardContent>
-          </Card>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Alert Summary Panel */}
+          {showAlertSummary && alerts.length > 0 && (
+            <AlertSummaryPanel
+              alerts={alerts}
+              timestamp={alertSummaryTimestamp}
+              onDismiss={(id) => handleDismissAlert(id)}
+              onAddToPlan={(alert) => handleAddToPlan(alert)}
+              onClearAll={handleClearAllAlerts}
+            />
+          )}
 
           {/* Important Note */}
           <div className="p-3 sm:p-4 bg-amber-50 border border-amber-200 rounded-lg">
@@ -481,11 +681,6 @@ export default function RecordingPage({ user, patient, onNavigate, onLogout, onN
               This system is designed to assist documentation and should not replace clinical judgment.
             </p>
           </div>
-
-          {/* Alert Summary Panel - shown after recording stops */}
-          {showAlertSummary && alerts.length > 0 && (
-            <AlertSummaryPanel alerts={alerts} timestamp={alertSummaryTimestamp} />
-          )}
         </div>
 
         {/* Right Sidebar - Alerts Panel */}
@@ -501,6 +696,94 @@ export default function RecordingPage({ user, patient, onNavigate, onLogout, onN
           </div>
         </div>
       </div>
+
+      {/* New Patient Dialog */}
+      <Dialog open={showNewPatientDialog} onOpenChange={setShowNewPatientDialog}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UserPlus className="h-5 w-5" />
+              Create New Patient
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="patientName">Patient Name *</Label>
+              <Input
+                id="patientName"
+                placeholder="Enter patient name"
+                value={newPatientForm.name}
+                onChange={(e) => setNewPatientForm({ ...newPatientForm, name: e.target.value })}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="patientAge">Age</Label>
+                <Input
+                  id="patientAge"
+                  type="number"
+                  placeholder="Age"
+                  value={newPatientForm.age}
+                  onChange={(e) => setNewPatientForm({ ...newPatientForm, age: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="patientGender">Gender</Label>
+                <Select 
+                  value={newPatientForm.gender} 
+                  onValueChange={(value: 'M' | 'F' | 'O') => setNewPatientForm({ ...newPatientForm, gender: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="M">Male</SelectItem>
+                    <SelectItem value="F">Female</SelectItem>
+                    <SelectItem value="O">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="patientPhone">Phone</Label>
+              <Input
+                id="patientPhone"
+                placeholder="Phone number"
+                value={newPatientForm.phone}
+                onChange={(e) => setNewPatientForm({ ...newPatientForm, phone: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="patientEmail">Email</Label>
+              <Input
+                id="patientEmail"
+                type="email"
+                placeholder="Email address"
+                value={newPatientForm.email}
+                onChange={(e) => setNewPatientForm({ ...newPatientForm, email: e.target.value })}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowNewPatientDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleCreatePatient} disabled={isCreatingPatient}>
+              {isCreatingPatient ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                <>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create Patient
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 }
