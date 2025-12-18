@@ -347,30 +347,34 @@ export default function RecordingPage({ user, patient: initialPatient, onNavigat
 
               // Update visit with risk assessment
               await updateVisitRiskAssessment(visit.id, {
-                riskLevel: riskAssessment.riskLevel as 'low' | 'medium' | 'high',
+                riskLevel: riskAssessment.riskLevel,
                 riskScore: riskAssessment.riskScore,
                 riskFactors: riskAssessment.riskFactors,
-                aiRiskAssessment: riskAssessment
+                summary: riskAssessment.summary,
+                concerns: riskAssessment.concerns,
+                recommendations: riskAssessment.recommendations,
+                followUpUrgency: riskAssessment.followUpUrgency
               });
 
               // Update patient's overall risk level
-              await updatePatientRiskLevel(patient.id, {
-                riskLevel: riskAssessment.riskLevel as 'low' | 'medium' | 'high',
-                riskScore: riskAssessment.riskScore,
-                riskFactors: riskAssessment.riskFactors,
-                riskNotes: riskAssessment.summary
-              });
+              await updatePatientRiskLevel(
+                patient.id,
+                riskAssessment.riskLevel,
+                riskAssessment.riskScore,
+                riskAssessment.riskFactors,
+                riskAssessment.summary
+              );
 
               // Create risk history entry
-              await createPatientRiskHistoryEntry({
-                patientId: patient.id,
-                visitId: visit.id,
-                riskLevel: riskAssessment.riskLevel as 'low' | 'medium' | 'high',
-                riskScore: riskAssessment.riskScore,
-                riskFactors: riskAssessment.riskFactors,
-                assessedBy: 'ai',
-                notes: riskAssessment.summary
-              });
+              await createPatientRiskHistoryEntry(
+                patient.id,
+                visit.id,
+                riskAssessment.riskLevel,
+                riskAssessment.riskScore,
+                riskAssessment.riskFactors,
+                'ai',
+                riskAssessment.summary
+              );
 
               toast.success(`Risk assessment complete: ${riskAssessment.riskLevel.toUpperCase()} risk (${riskAssessment.riskScore}/100)`);
             } catch (riskErr) {

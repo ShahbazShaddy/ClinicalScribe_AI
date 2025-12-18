@@ -172,6 +172,26 @@ export const patientRiskHistory = pgTable('patient_risk_history', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
+// Patient emails table for tracking sent emails
+export const patientEmails = pgTable('patient_emails', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  patientId: uuid('patient_id').notNull().references(() => patients.id, { onDelete: 'cascade' }),
+  visitId: uuid('visit_id').references(() => visits.id, { onDelete: 'set null' }),
+  subject: text('subject').notNull(),
+  body: text('body').notNull(),
+  recipientEmail: varchar('recipient_email', { length: 255 }).notNull(),
+  recipientName: varchar('recipient_name', { length: 255 }),
+  emailType: varchar('email_type', { length: 50 }).default('visit_summary'), // visit_summary, follow_up, reminder, custom
+  status: varchar('status', { length: 20 }).default('draft'), // draft, sent, failed, delivered
+  sentAt: timestamp('sent_at'),
+  aiGenerated: boolean('ai_generated').default(true),
+  aiPrompt: text('ai_prompt'),
+  generationContext: jsonb('generation_context').$type<Record<string, any>>(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
 // Define relations
 export const usersRelations = relations(users, ({ many, one }) => ({
   notes: many(notes),
@@ -192,6 +212,7 @@ export const patientsRelations = relations(patients, ({ one, many }) => ({
   chatSessions: many(patientChatSessions),
   chatMessages: many(patientChatMessages),
   riskHistory: many(patientRiskHistory),
+  emails: many(patientEmails),
 }));
 
 export const visitsRelations = relations(visits, ({ one }) => ({
@@ -216,6 +237,21 @@ export const patientRiskHistoryRelations = relations(patientRiskHistory, ({ one 
   }),
   visit: one(visits, {
     fields: [patientRiskHistory.visitId],
+    references: [visits.id],
+  }),
+}));
+
+export const patientEmailsRelations = relations(patientEmails, ({ one }) => ({
+  user: one(users, {
+    fields: [patientEmails.userId],
+    references: [users.id],
+  }),
+  patient: one(patients, {
+    fields: [patientEmails.patientId],
+    references: [patients.id],
+  }),
+  visit: one(visits, {
+    fields: [patientEmails.visitId],
     references: [visits.id],
   }),
 }));
@@ -314,3 +350,6 @@ export type NewPatientChatMessage = typeof patientChatMessages.$inferInsert;
 
 export type PatientRiskHistory = typeof patientRiskHistory.$inferSelect;
 export type NewPatientRiskHistory = typeof patientRiskHistory.$inferInsert;
+
+export type PatientEmail = typeof patientEmails.$inferSelect;
+export type NewPatientEmail = typeof patientEmails.$inferInsert;

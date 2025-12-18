@@ -1,5 +1,5 @@
 import supabase, { isSupabaseConfigured } from './client';
-import type { User, NewUser, Note, NewNote, UserSettings, NewUserSettings, ChatMessage, NewChatMessage, ChatSession, NewChatSession, Patient, NewPatient, Visit, NewVisit, PatientChatSession, NewPatientChatSession, PatientChatMessage, NewPatientChatMessage, PatientRiskHistory, NewPatientRiskHistory } from './schema';
+import type { User, NewUser, Note, NewNote, UserSettings, NewUserSettings, ChatMessage, NewChatMessage, ChatSession, NewChatSession, Patient, NewPatient, Visit, NewVisit, PatientChatSession, NewPatientChatSession, PatientChatMessage, NewPatientChatMessage, PatientRiskHistory, NewPatientRiskHistory, PatientEmail, NewPatientEmail } from './schema';
 
 // ============================================
 // User Operations
@@ -1034,6 +1034,11 @@ export function dbPatientToAppPatient(dbPatient: any): {
   insuranceId?: string;
   medicalRecordNumber?: string;
   notes?: string;
+  riskLevel?: string;
+  riskScore?: number;
+  riskFactors?: string[];
+  riskNotes?: string;
+  riskAssessedAt?: string;
 } {
   return {
     id: dbPatient.id,
@@ -1054,6 +1059,11 @@ export function dbPatientToAppPatient(dbPatient: any): {
     insuranceId: dbPatient.insurance_id,
     medicalRecordNumber: dbPatient.medical_record_number,
     notes: dbPatient.notes,
+    riskLevel: dbPatient.risk_level,
+    riskScore: dbPatient.risk_score,
+    riskFactors: dbPatient.risk_factors || [],
+    riskNotes: dbPatient.risk_notes,
+    riskAssessedAt: dbPatient.risk_assessed_at,
   };
 }
 
@@ -1852,4 +1862,176 @@ export async function getUpcomingFollowUps(userId: string): Promise<Array<{
     console.error('Error fetching upcoming follow-ups:', err);
     return [];
   }
+}
+
+// ============================================
+// Patient Email Operations
+// ============================================
+
+export async function createPatientEmail(emailData: {
+  userId: string;
+  patientId: string;
+  visitId?: string;
+  subject: string;
+  body: string;
+  recipientEmail: string;
+  recipientName?: string;
+  emailType?: string;
+  status?: string;
+  aiGenerated?: boolean;
+  aiPrompt?: string;
+  generationContext?: Record<string, any>;
+}): Promise<PatientEmail | null> {
+  if (!isSupabaseConfigured()) {
+    console.warn('Supabase not configured');
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from('patient_emails')
+    .insert({
+      user_id: emailData.userId,
+      patient_id: emailData.patientId,
+      visit_id: emailData.visitId,
+      subject: emailData.subject,
+      body: emailData.body,
+      recipient_email: emailData.recipientEmail,
+      recipient_name: emailData.recipientName,
+      email_type: emailData.emailType || 'visit_summary',
+      status: emailData.status || 'draft',
+      ai_generated: emailData.aiGenerated ?? true,
+      ai_prompt: emailData.aiPrompt,
+      generation_context: emailData.generationContext,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error creating patient email:', error);
+    throw error;
+  }
+
+  return data;
+}
+
+export async function updatePatientEmail(
+  emailId: string,
+  updates: {
+    subject?: string;
+    body?: string;
+    status?: string;
+    sentAt?: string;
+    aiPrompt?: string;
+  }
+): Promise<PatientEmail | null> {
+  if (!isSupabaseConfigured()) {
+    return null;
+  }
+
+  const updateData: Record<string, any> = {
+    updated_at: new Date().toISOString(),
+  };
+
+  if (updates.subject !== undefined) updateData.subject = updates.subject;
+  if (updates.body !== undefined) updateData.body = updates.body;
+  if (updates.status !== undefined) updateData.status = updates.status;
+  if (updates.sentAt !== undefined) updateData.sent_at = updates.sentAt;
+  if (updates.aiPrompt !== undefined) updateData.ai_prompt = updates.aiPrompt;
+
+  const { data, error } = await supabase
+    .from('patient_emails')
+    .update(updateData)
+    .eq('id', emailId)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error updating patient email:', error);
+    throw error;
+  }
+
+  return data;
+}
+
+export async function getPatientEmails(patientId: string): Promise<PatientEmail[]> {
+  if (!isSupabaseConfigured()) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from('patient_emails')
+    .select('*')
+    .eq('patient_id', patientId)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching patient emails:', error);
+    throw error;
+  }
+
+  return data || [];
+}
+
+export async function getPatientEmailById(emailId: string): Promise<PatientEmail | null> {
+  if (!isSupabaseConfigured()) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from('patient_emails')
+    .select('*')
+    .eq('id', emailId)
+    .single();
+
+  if (error && error.code !== 'PGRST116') {
+    console.error('Error fetching patient email:', error);
+    throw error;
+  }
+
+  return data;
+}
+
+export async function deletePatientEmail(emailId: string): Promise<boolean> {
+  if (!isSupabaseConfigured()) {
+    return false;
+  }
+
+  const { error } = await supabase
+    .from('patient_emails')
+    .delete()
+    .eq('id', emailId);
+
+  if (error) {
+    console.error('Error deleting patient email:', error);
+    throw error;
+  }
+
+  return true;
+}
+
+export async function getEmailsByUserId(userId: string, limit = 50): Promise<PatientEmail[]> {
+  if (!isSupabaseConfigured()) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from('patient_emails')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    console.error('Error fetching user emails:', error);
+    throw error;
+  }
+
+  return data || [];
+}
+
+export async function markEmailAsSent(emailId: string): Promise<PatientEmail | null> {
+  return updatePatientEmail(emailId, {
+    status: 'sent',
+    sentAt: new Date().toISOString(),
+  });
 }

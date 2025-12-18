@@ -58,7 +58,7 @@ export interface Patient {
   lastVisit?: string;
   visits?: Visit[];
   // Risk assessment fields
-  riskLevel?: 'low' | 'medium' | 'high';
+  riskLevel?: 'low' | 'moderate' | 'medium' | 'high' | 'critical';
   riskScore?: number;
   riskFactors?: string[];
   riskAssessedAt?: string;
