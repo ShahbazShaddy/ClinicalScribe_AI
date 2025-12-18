@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import nodemailer from 'nodemailer';
+import sgMail from '@sendgrid/mail';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -16,19 +16,12 @@ app.use(express.json({ limit: '1mb' }));
 
 const PORT = process.env.PORT || process.env.EMAIL_SERVER_PORT || 8787;
 
-function ensureSmtpConfig() {
-  const required = [
-    'VITE_SMTP_HOST',
-    'VITE_SMTP_PORT',
-    'VITE_SMTP_USER',
-    'VITE_SMTP_PASSWORD',
-    'VITE_SMTP_FROM_EMAIL',
-  ];
-
-  const missing = required.filter((key) => !process.env[key] || process.env[key]?.length === 0);
-  if (missing.length > 0) {
-    throw new Error(`Missing SMTP environment variables: ${missing.join(', ')}`);
+// Initialize SendGrid
+function ensureSendGridConfig() {
+  if (!process.env.SENDGRID_API_KEY) {
+    throw new Error('Missing SENDGRID_API_KEY environment variable');
   }
+  sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 }
 
 app.get('/health', (_, res) => {
@@ -37,7 +30,7 @@ app.get('/health', (_, res) => {
 
 app.post('/api/send-email', async (req, res) => {
   try {
-    ensureSmtpConfig();
+    ensureSendGridConfig();
   } catch (error) {
     return res.status(500).json({ error: error.message });
   }
@@ -48,28 +41,29 @@ app.post('/api/send-email', async (req, res) => {
     return res.status(400).json({ error: 'Missing required fields: to, subject, and body are required.' });
   }
 
-  const transporter = nodemailer.createTransport({
-    host: process.env.VITE_SMTP_HOST,
-    port: parseInt(process.env.VITE_SMTP_PORT || '587', 10),
-    secure: process.env.VITE_SMTP_SECURE === 'true',
-    auth: {
-      user: process.env.VITE_SMTP_USER,
-      pass: process.env.VITE_SMTP_PASSWORD,
-    },
-  });
+  const fromEmail = from || process.env.SENDGRID_FROM_EMAIL || 'noreply@clinicalscribe.com';
+  const fromNameFinal = fromName || process.env.SENDGRID_FROM_NAME || 'ClinicalScribe AI';
+
+  const msg = {
+    to: toName ? { email: to, name: toName } : to,
+    from: { email: fromEmail, name: fromNameFinal },
+    subject,
+    text: body,
+    html: body.replace(/\n/g, '<br>'),
+  };
 
   try {
-    const info = await transporter.sendMail({
-      from: `${fromName || process.env.VITE_SMTP_FROM_NAME || 'ClinicalScribe AI'} <${from || process.env.VITE_SMTP_FROM_EMAIL}>`,
-      to: toName ? `${toName} <${to}>` : to,
-      subject,
-      text: body,
+    const [response] = await sgMail.send(msg);
+    res.json({ 
+      messageId: response.headers['x-message-id'] || `sg-${Date.now()}`,
+      status: 'sent'
     });
-
-    res.json({ messageId: info.messageId });
   } catch (error) {
-    console.error('SMTP send error:', error);
-    res.status(500).json({ error: 'Failed to send email', details: error instanceof Error ? error.message : 'Unknown error' });
+    console.error('SendGrid send error:', error);
+    res.status(500).json({ 
+      error: 'Failed to send email', 
+      details: error instanceof Error ? error.message : 'Unknown error' 
+    });
   }
 });
 
