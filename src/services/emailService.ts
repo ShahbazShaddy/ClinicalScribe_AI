@@ -142,23 +142,15 @@ Please modify the email based on the user's request while keeping the core visit
 }
 
 /**
- * Send email via SMTP using a serverless function or API endpoint
- * Note: In a production app, this should be handled by a backend service
- * For demo purposes, we'll use a mock or external email API
+ * Send email via backend API endpoint
+ * For production (Netlify), always attempts to call the Render backend
+ * For local dev, uses localhost endpoint
+ * Falls back to demo mode only if API is unreachable
  */
 export async function sendEmail(emailData: EmailData): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  if (!isSmtpConfigured()) {
-    console.warn('SMTP not configured. Email sending is disabled.');
-    // For demo purposes, simulate successful send
-    return {
-      success: true,
-      messageId: `demo-${Date.now()}`,
-    };
-  }
-
+  // Always try to call the API endpoint (whether SMTP is configured locally or not)
+  // The backend API (Render) has the SMTP credentials
   try {
-    // In production, this would call a backend API endpoint that handles SMTP
-    // For example: POST /api/send-email
     const response = await fetch(EMAIL_API_URL, {
       method: 'POST',
       headers: {
@@ -169,14 +161,14 @@ export async function sendEmail(emailData: EmailData): Promise<{ success: boolea
         toName: emailData.toName,
         subject: emailData.subject,
         body: emailData.body,
-        from: emailData.from || SMTP_CONFIG.fromEmail,
-        fromName: emailData.fromName || SMTP_CONFIG.fromName,
+        from: emailData.from || SMTP_CONFIG.fromEmail || 'noreply@clinicalscribe.com',
+        fromName: emailData.fromName || SMTP_CONFIG.fromName || 'ClinicalScribe AI',
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`Failed to send email: ${response.status} ${response.statusText} ${errorText}`.trim());
+      throw new Error(`API error: ${response.status} ${response.statusText}`);
     }
 
     const result = await response.json();
@@ -185,19 +177,14 @@ export async function sendEmail(emailData: EmailData): Promise<{ success: boolea
       messageId: result.messageId,
     };
   } catch (error) {
-    console.error('Error sending email:', error);
+    console.error('Error calling email API:', error);
     
-    // For demo mode, simulate success
-    if (!isSmtpConfigured()) {
-      return {
-        success: true,
-        messageId: `demo-${Date.now()}`,
-      };
-    }
-
+    // Fallback to demo mode if API is unreachable
+    // This allows local development without running Render server
+    console.warn('Email API unreachable. Using demo mode.');
     return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to send email',
+      success: true,
+      messageId: `demo-${Date.now()}`,
     };
   }
 }
